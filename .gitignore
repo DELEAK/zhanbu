@@ -1,0 +1,35 @@
+# ── 依赖 ─────────────────────────────────────────────
+node_modules/
+
+# ── 运行期数据（SQLite 库 + WAL/SHM + 日志）────────────
+# data/ 只在启动时由 server/bootstrap.mjs 使用，内含 guanwei.db 等运行时产物
+# ⚠ 必须写成 "/data/"（锚定仓库根）：裸 "data/" 会匹配任意层级，
+#    曾误伤 vendor/guanwei/shared/core/data/（17 个排盘引擎知识库文件），
+#    导致 clone 出来的仓库启动即 ERR_MODULE_NOT_FOUND。
+/data/
+*.log
+npm-debug.log*
+
+# ── 机密配置（如 MIMO_API_KEY）────────────────────────
+# KEY=VALUE 逐行，bootstrap.mjs 启动时自动读取；严禁入库
+.env
+
+# ── 牌面图片链路的缓存与 Python 依赖（不入库）──────────
+# 重建命令 npm run fetch:cards / encode:cards 的中间产物，见 docs/env.md
+scripts/.card-cache/
+scripts/.pylibs/
+
+# ── 临时探针 / 调试 / 评审产物（交付目录保持干净）──────
+.t4-verify/
+.t*-verify/
+.review-*/
+.review-*.mjs
+.probe-*/
+scripts/.probe-*.mjs
+*.part
+.DS_Store
+
+# ── 编辑器 / 系统 ─────────────────────────────────────
+*.swp
+.idea/
+.vscode/

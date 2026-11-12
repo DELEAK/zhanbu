@@ -1,0 +1,20 @@
+{
+  "name": "divination-station",
+  "version": "1.0.0",
+  "private": true,
+  "description": "个人占卜小站：塔罗 + 六爻，双性能模式自托管占卜站点（计算在服务端）",
+  "type": "module",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node --experimental-strip-types server/index.ts",
+    "dev": "node --experimental-strip-types --watch server/index.ts",
+    "fetch:cards": "node scripts/fetch-cards.mjs",
+    "encode:cards": "node scripts/encode-cards.mjs"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "lunar-typescript": "^1.6.12",
+    "astronomy-engine": "^2.1.19"
+  }
+}

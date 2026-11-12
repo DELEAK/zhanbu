@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>观微卜影 · 塔罗与六爻</title>
+<meta name="description" content="个人占卜小站：塔罗牌阵与六爻纳甲，服务端定稿抽牌，双性能模式，无遥测。">
+<script>
+  try {
+    document.documentElement.dataset.perf = localStorage.getItem('divination.perf') === 'high' ? 'high' : 'low';
+  } catch (e) {
+    document.documentElement.dataset.perf = 'low';
+  }
+</script>
+<link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="container topbar-inner">
+    <div>
+      <a class="brand" href="/">观微卜影</a>
+    </div>
+    <button class="perf-toggle" type="button" role="switch" aria-checked="false" title="切换性能模式">
+      <span class="perf-dot" aria-hidden="true"></span>
+      性能模式 <b class="perf-state">流畅</b>
+    </button>
+  </div>
+</header>
+
+<main class="container">
+
+  <section class="hero">
+    <span class="eyebrow">TAROT · LIUYAO</span>
+    <h1>◆ 观 微 卜 影 ◆</h1>
+    <p class="sub">塔罗与六爻 · 服务端定稿的自托管占卜小站</p>
+    <hr class="rule">
+  </section>
+
+  <section class="entry-grid" aria-label="选择占卜方式">
+    <a class="entry-card" href="/tarot.html">
+      <span class="eyebrow">01 / TAROT</span>
+      <div class="entry-title">塔罗占卜</div>
+      <p class="entry-desc">78 张韦特牌面，牌阵自选，抽牌与正逆位由服务端定稿。</p>
+      <span class="entry-cta">[ 进 入 卜 问 → ]</span>
+    </a>
+    <a class="entry-card" href="/liuyao.html">
+      <span class="eyebrow">02 / LIUYAO</span>
+      <div class="entry-title">六爻起卦</div>
+      <p class="entry-desc">纳甲筮法，摇卦定爻，本卦变卦、世应动爻全列。</p>
+      <span class="entry-cta">[ 进 入 起 卦 → ]</span>
+    </a>
+  </section>
+
+  <hr class="rule">
+
+  <details class="deep-panel">
+    <summary><span class="sum-txt">⌄ 抽牌机制与概率</span></summary>
+    <div class="deep-body">
+      <p><b>抽牌与正逆位：</b>洗牌、抽牌与每张牌的正逆位由服务端计算引擎定稿，前端只负责呈现；78 张牌按所选牌阵抽取，逆位出现概率为 30%。</p>
+      <p><b>问题的作用：</b>问题不改变抽到哪些牌，只影响解读的语境，以及六爻用神候选的推导。</p>
+      <p><b>深度解读：</b>站内不内嵌任何大模型。展开深度解读时会生成一段可复制的 AI 提示词，携带问题、分类与本次盘面事实，可自行粘贴到任意 AI 工具中获取进一步解读。</p>
+      <p><b>双性能模式：</b>「流畅」模式零动画、零阴影，只加载 480 宽 WebP 牌面；「精致」模式启用 3D 翻牌、错峰入场与 1200 宽 AVIF 牌面。两种模式共用同一套后端接口与同一份数据。</p>
+    </div>
+  </details>
+
+</main>
+
+<footer>
+  <div class="container">
+    <p class="footer-note">本站内容仅供娱乐与自我觉察，不预测未来，也不构成医疗、心理、法律或财务决策依据。</p>
+    <p class="footer-meta">服务端计算 · 无遥测</p>
+  </div>
+</footer>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="/assets/app.js" defer></script>
+</body>
+</html>

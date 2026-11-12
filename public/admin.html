@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>记录管理 · 观微卜影</title>
+<meta name="robots" content="noindex,nofollow">
+<script>
+  try {
+    document.documentElement.dataset.perf = localStorage.getItem('divination.perf') === 'high' ? 'high' : 'low';
+  } catch (e) {
+    document.documentElement.dataset.perf = 'low';
+  }
+</script>
+<link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="container topbar-inner">
+    <div><a class="brand" href="/">观微卜影</a><span class="brand-sep">/</span><span class="brand-page">记录管理</span></div>
+    <div class="admin-actions">
+      <a class="btn btn-ghost" href="/">返回站点</a>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+
+  <section class="hero">
+    <span class="eyebrow">RECORDS · ADMIN</span>
+    <h1>占 卜 记 录</h1>
+    <p class="sub">只读查看起占的问题、盘面摘要与访问来源；数据来自本机 SQLite。</p>
+    <hr class="rule">
+  </section>
+
+  <section aria-label="查询条件">
+    <div class="admin-toolbar">
+      <input class="field" id="token" type="password" autocomplete="off" placeholder="管理口令（DIVINATION_ADMIN_TOKEN）">
+      <select class="field" id="art" aria-label="术数筛选">
+        <option value="all">全部术数</option>
+        <option value="tarot">塔罗</option>
+        <option value="liuyao">六爻</option>
+      </select>
+      <div class="admin-actions">
+        <button class="btn" id="loadBtn" type="button">查 询</button>
+        <button class="btn btn-ghost" id="exportBtn" type="button">导出 CSV</button>
+      </div>
+    </div>
+    <p class="admin-meta" id="meta">尚未查询。</p>
+  </section>
+
+  <section class="admin-grid" aria-label="记录列表与详情">
+    <div class="admin-list">
+      <div class="admin-pager" id="pager"></div>
+      <div id="list"><p class="rec-empty">输入口令后点「查询」。</p></div>
+    </div>
+    <div class="admin-detail-col">
+      <div id="detail"><p class="rec-empty">点击左侧任意一条记录，在此查看盘面事实与 AI 解读。</p></div>
+    </div>
+  </section>
+
+  <footer class="footer-note">
+    <p>本页仅本机自托管使用；口令在服务端 <code>DIVINATION_ADMIN_TOKEN</code> 配置，未经口令无法读取记录。</p>
+  </footer>
+
+</main>
+
+<script src="/assets/admin.js"></script>
+</body>
+</html>

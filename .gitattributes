@@ -1,0 +1,20 @@
+# 默认按文本处理，提交时统一 LF，避免跨平台协作时整文件 diff
+* text=auto eol=lf
+
+# 牌面图片等二进制：不做换行转换、不做 diff
+*.webp binary
+*.avif binary
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.woff binary
+
+# 明确按文本处理（避免被 auto 误判）
+*.ts    text
+*.mjs   text
+*.js    text
+*.json  text
+*.html  text
+*.css   text
+*.md    text
+*.py    text

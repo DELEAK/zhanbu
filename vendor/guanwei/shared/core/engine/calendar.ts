@@ -1,0 +1,149 @@
+// 历法模块：儒略日 / 节气（精确，基于 lunar-typescript）/ 农历黄历
+import { Solar } from 'lunar-typescript';
+import { JIEQI_APPROX } from '../data/qimen';
+
+/* ---------- 儒略日 ---------- */
+export function jd(y: number, m: number, d: number): number {
+  let yy = y, mm = m;
+  if (mm <= 2) { yy--; mm += 12; }
+  const A = Math.floor(yy / 100);
+  return Math.floor(365.25 * (yy + 4716)) + Math.floor(30.6001 * (mm + 1)) + d + 2 - A + Math.floor(A / 4) - 1524.5;
+}
+
+export function daysSince(y: number, m: number, d: number): number {
+  return Math.floor(jd(y, m, d) - 2451545);
+}
+
+/* ---------- 节气 ---------- */
+// 近似表取法（奇门定遁 / 展示用）：
+export function getJieqiApproxName(_y: number, m: number, d: number): string {
+  const v = m * 100 + d;
+  let name = '大雪';
+  for (let i = JIEQI_APPROX.length - 1; i >= 0; i--) {
+    const [, jm, jd2] = JIEQI_APPROX[i];
+    if (v >= jm * 100 + jd2) { name = JIEQI_APPROX[i][0]; break; }
+  }
+  return name;
+}
+
+// 精确节气时刻表（某年全年 24 节气）
+// 注：lunar-typescript 的 getJieQiTable key 混用中英文（当年冬至→次年惊蛰段为英文拼音），此处统一映射为中文
+export interface JieQiTime { name: string; time: Date }
+const JQ_KEY_CN: Record<string, string> = {
+  LI_CHUN: '立春', YU_SHUI: '雨水', JING_ZHE: '惊蛰', CHUN_FEN: '春分',
+  QING_MING: '清明', GU_YU: '谷雨', LI_XIA: '立夏', XIAO_MAN: '小满',
+  MANG_ZHONG: '芒种', XIA_ZHI: '夏至', XIAO_SHU: '小暑', DA_SHU: '大暑',
+  LI_QIU: '立秋', CHU_SHU: '处暑', BAI_LU: '白露', QIU_FEN: '秋分',
+  HAN_LU: '寒露', SHUANG_JIANG: '霜降', LI_DONG: '立冬', XIAO_XUE: '小雪',
+  DA_XUE: '大雪', DONG_ZHI: '冬至', XIAO_HAN: '小寒', DA_HAN: '大寒',
+};
+export function getJieQiTableExact(year: number): JieQiTime[] {
+  const solar = Solar.fromYmdHms(year, 6, 1, 12, 0, 0);
+  const table = solar.getLunar().getJieQiTable();
+  const out: JieQiTime[] = [];
+  for (const key of Object.keys(table)) {
+    const s = table[key];
+    // lunar 节气时刻为北京标准时（固定 UTC+8，无夏令时概念）。
+    // 必须用显式 +08:00 构造 Date：若用 new Date(y,m,d,h,...) 本地构造，
+    // ICU 时区库会把 1986-1991 夏令时窗口的时刻误按钟表时(UTC+9)解释，系统性早 1 小时
+    out.push({
+      name: JQ_KEY_CN[key] || key,
+      time: new Date(s.toYmdHms().replace(' ', 'T') + '+08:00'),
+    });
+  }
+  return out;
+}
+
+// 北京时间 → 绝对毫秒（固定 UTC+8，显式构造；避免 new Date(y,m,d,h..) 被 ICU 时区库
+// 在 1986-1991 夏令时窗口按钟表时(UTC+9)解释而偏 1 小时）
+export function beijingMs(y: number, m: number, d: number, hour = 12, min = 0): number {
+  return Date.UTC(y, m - 1, d, hour, min) - 8 * 3600 * 1000;
+}
+
+// 当天是否为某节气（精确）
+export function getJieQiNameExact(y: number, m: number, d: number): string | null {
+  const solar = Solar.fromYmdHms(y, m, d, 12, 0, 0);
+  return solar.getLunar().getJieQi() || null;
+}
+
+// 当前所处节气（精确：取该时刻之前最近的节气，24 节气皆可；缺省正午）
+// （2026-09：增加 hour/min——原固定 12:00 使交节当天下午/晚上仍判旧节，奇门/六壬会排错）
+export function currentJieqiNameExact(y: number, m: number, d: number, hour = 12, min = 0): string {
+  const t = beijingMs(y, m, d, hour, min);
+  let best: { name: string; time: number } | null = null;
+  for (const yy of [y - 1, y, y + 1]) {
+    for (const jq of getJieQiTableExact(yy)) {
+      const tt = jq.time.getTime();
+      if (tt <= t && (!best || tt > best.time)) best = { name: jq.name, time: tt };
+    }
+  }
+  return best ? best.name : '大雪';
+}
+
+// 十二「节」（定月支用）与月支映射（0=寅 … 11=丑）
+export const JIE_BRANCH: Record<string, number> = {
+  小寒: 11, 立春: 0, 惊蛰: 1, 清明: 2, 立夏: 3, 芒种: 4,
+  小暑: 5, 立秋: 6, 白露: 7, 寒露: 8, 立冬: 9, 大雪: 10,
+};
+
+// 判断给定时刻位于哪个「节」之后 → 返回月支（0=寅 正月起）
+export function monthBranchOf(y: number, m: number, d: number, hour: number, min = 0): number {
+  const t = beijingMs(y, m, d, hour, min);
+  // 收集 y-1/y/y+1 三年的节时刻，取 t 之前最近的
+  let best: { name: string; time: number } | null = null;
+  for (const yy of [y - 1, y, y + 1]) {
+    for (const jq of getJieQiTableExact(yy)) {
+      if (JIE_BRANCH[jq.name] === undefined) continue; // 只取十二节
+      const tt = jq.time.getTime();
+      if (tt <= t && (!best || tt > best.time)) best = { name: jq.name, time: tt };
+    }
+  }
+  return best ? JIE_BRANCH[best.name] : 0;
+}
+
+// 判断给定时刻是否已过某「节」（精确，年柱用立春）
+export function isAfterJie(y: number, m: number, d: number, hour: number, min: number, jieName: string): boolean {
+  const t = new Date(y, m - 1, d, hour, min).getTime();
+  for (const yy of [y - 1, y, y + 1]) {
+    for (const jq of getJieQiTableExact(yy)) {
+      if (jq.name === jieName && jq.time.getTime() <= t) return true;
+    }
+  }
+  return false;
+}
+
+/* ---------- 农历 / 黄历（万年历，供 almanac 模块与首页） ---------- */
+export interface AlmanacDay {
+  lunarText: string;          // 二〇二四年腊月廿六
+  ganzhiYear: string;
+  ganzhiMonth: string;
+  ganzhiDay: string;
+  shengxiao: string;
+  xingZuo: string;
+  jieQi: string | null;       // 当天节气名
+  yi: string[];
+  ji: string[];
+  pengZu: string;
+  chong: string;
+  sha: string;
+}
+
+export function almanacOf(y: number, m: number, d: number): AlmanacDay {
+  const solar = Solar.fromYmdHms(y, m, d, 12, 0, 0);
+  const l = solar.getLunar();
+  const ec = l.getEightChar();
+  return {
+    lunarText: l.toString(),
+    ganzhiYear: ec.getYear(),
+    ganzhiMonth: ec.getMonth(),
+    ganzhiDay: ec.getDay(),
+    shengxiao: l.getYearShengXiao(),
+    xingZuo: solar.getXingZuo(),
+    jieQi: l.getJieQi() || null,
+    yi: l.getDayYi(),
+    ji: l.getDayJi(),
+    pengZu: l.getPengZuGan() + ' ' + l.getPengZuZhi(),
+    chong: l.getDayChongDesc(),
+    sha: l.getDaySha(),
+  };
+}

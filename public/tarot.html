@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>塔罗占卜 · 观微卜影</title>
+<meta name="description" content="塔罗牌阵占卜：选牌阵、写问题、服务端抽牌定稿，简要与深度两层解读。">
+<script>
+  try {
+    document.documentElement.dataset.perf = localStorage.getItem('divination.perf') === 'high' ? 'high' : 'low';
+  } catch (e) {
+    document.documentElement.dataset.perf = 'low';
+  }
+</script>
+<link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="container topbar-inner">
+    <div>
+      <a class="brand" href="/">观微卜影</a>
+      <span class="brand-sep">/</span><span class="brand-page">塔罗占卜</span>
+    </div>
+    <button class="perf-toggle" type="button" role="switch" aria-checked="false" title="切换性能模式">
+      <span class="perf-dot" aria-hidden="true"></span>
+      性能模式 <b class="perf-state">流畅</b>
+    </button>
+  </div>
+</header>
+
+<main class="container">
+
+  <section class="section" id="stepSpread">
+    <h2 class="step">STEP 01 · 选择牌阵</h2>
+    <div class="spread-grid" id="spreadGrid"></div>
+    <p class="hint" id="spreadHint">牌阵载入中…</p>
+  </section>
+
+  <section class="section" id="stepQuestion">
+    <h2 class="step">STEP 02 · 心中的问题（可选）</h2>
+    <div class="input-group">
+      <textarea class="field" id="question" rows="3" maxlength="300"
+        placeholder="感情走向如何？/ 事业该往哪走？/ 眼下困境怎么破？/ 近期契机在哪？"></textarea>
+      <div class="chips" id="chips">
+        <button class="chip" type="button">感情走向</button>
+        <button class="chip" type="button">事业方向</button>
+        <button class="chip" type="button">眼下困境</button>
+        <button class="chip" type="button">近期契机</button>
+      </div>
+      <p class="hint">问题不改变抽到哪些牌；请控制在 300 字以内。</p>
+      <div class="category-row">
+        <label for="category">问题分类</label>
+        <select class="field" id="category">
+          <option>综合</option>
+          <option>感情</option>
+          <option>事业</option>
+          <option>财运</option>
+          <option>学业</option>
+          <option>健康</option>
+          <option>人际</option>
+        </select>
+      </div>
+      <div class="form-actions">
+        <button class="btn" id="drawBtn" type="button" disabled>✦ 洗 牌 并 抽 牌</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="result" hidden></section>
+
+</main>
+
+<footer>
+  <div class="container">
+    <p class="footer-note">本站内容仅供娱乐与自我觉察，不预测未来，也不构成医疗、心理、法律或财务决策依据。</p>
+    <p class="footer-meta">服务端计算 · 无遥测</p>
+  </div>
+</footer>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="/assets/app.js" defer></script>
+<script src="/assets/tarot.js" defer></script>
+</body>
+</html>
