@@ -404,6 +404,175 @@
     });
   }
 
+  /* ---------------- 九术共用：盘面/表单小工具 ---------------- */
+
+  var HOUR_NAMES = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
+
+  function pad2(n) { return n < 10 ? '0' + n : String(n); }
+
+  /* 钟点 → 时辰序（0=子，23:00-00:59 → 0；与 docs/plan-nine-arts.md §4.1 一致） */
+  function hourIndexOfClock(hour24) {
+    return Math.floor(((Number(hour24) + 1) % 24) / 2);
+  }
+
+  function localStamp(d) {
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+
+  function localMinute(d) {
+    return localStamp(d) + 'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+  }
+
+  /* 出生信息表单：mode='hourIndex'（八字/紫微/小六壬）或 'clock'（占星需要时分）
+     opts: {date, hourIndex, hour, min, gender, hourUnknown, place(经度), lat} */
+  function birthForm(container, opts) {
+    if (!container) return;
+    var o = opts || {};
+    var mode = o.mode === 'clock' ? 'clock' : 'hourIndex';
+    var L = ['<div class="form-grid">'];
+    L.push('<label class="field-cell span-2"><span class="field-label">公历生日</span>' +
+      '<input class="field" type="date" data-birth="date" min="1900-01-01" max="2100-12-31" value="' +
+      esc(o.date || '1990-06-15') + '"></label>');
+
+    if (mode === 'clock') {
+      L.push('<label class="field-cell"><span class="field-label">出生时（0–23）</span>' +
+        '<input class="field" type="number" min="0" max="23" data-birth="hour" value="' +
+        (o.hour == null ? 12 : Number(o.hour)) + '"></label>');
+      L.push('<label class="field-cell"><span class="field-label">出生分（0–59）</span>' +
+        '<input class="field" type="number" min="0" max="59" data-birth="min" value="' +
+        (o.min == null ? 0 : Number(o.min)) + '"></label>');
+    } else {
+      var hi = o.hourIndex == null ? 6 : Number(o.hourIndex);
+      var opts2 = '';
+      HOUR_NAMES.forEach(function (n, i) {
+        opts2 += '<option value="' + i + '"' + (i === hi ? ' selected' : '') + '>' + n + ' 时</option>';
+      });
+      if (o.hourUnknown !== false) {
+        opts2 += '<option value="-1"' + (hi === -1 ? ' selected' : '') + '>时辰未知</option>';
+      }
+      L.push('<label class="field-cell"><span class="field-label">出生时辰</span>' +
+        '<select class="field" data-birth="hour">' + opts2 + '</select></label>');
+      L.push('<label class="field-cell"><span class="field-label">性别</span>' +
+        '<select class="field" data-birth="gender">' +
+        '<option' + (o.gender === '女' ? '' : ' selected') + '>男</option>' +
+        '<option' + (o.gender === '女' ? ' selected' : '') + '>女</option></select></label>');
+    }
+
+    if (o.place !== false) {
+      L.push('<label class="field-cell"><span class="field-label">出生地经度（可选，东经为正）</span>' +
+        '<input class="field" type="number" step="0.1" min="-180" max="180" data-birth="lng" placeholder="116.4"></label>');
+    }
+    if (o.lat) {
+      L.push('<label class="field-cell"><span class="field-label">出生地纬度（可选，北纬为正）</span>' +
+        '<input class="field" type="number" step="0.1" min="-90" max="90" data-birth="lat" placeholder="39.9"></label>');
+    }
+    L.push('</div>');
+    container.innerHTML = L.join('');
+  }
+
+  function numField(root, key) {
+    var el = root.querySelector('[data-birth="' + key + '"]');
+    if (!el) return null;
+    var v = String(el.value == null ? '' : el.value).trim();
+    if (v === '') return null;
+    var n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  /* 读取出生表单 → /api/chart 的 inputs；校验失败抛出可读错误（页面 catch 后 showToast） */
+  function readBirthForm(root) {
+    var dateEl = root.querySelector('[data-birth="date"]');
+    var date = dateEl ? dateEl.value : '';
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('请先选择公历生日');
+    var parts = date.split('-').map(Number);
+    var y = parts[0], m = parts[1], d = parts[2];
+    if (y < 1900 || y > 2100) throw new Error('公历年份需在 1900–2100 之间');
+
+    var clock = root.querySelector('[data-birth="min"]');
+    var lng = numField(root, 'lng');
+    if (lng !== null && (lng < -180 || lng > 180)) throw new Error('出生地经度需在 -180–180 之间');
+
+    if (clock) {
+      var hour = numField(root, 'hour');
+      var min = numField(root, 'min');
+      if (hour === null || hour < 0 || hour > 23) throw new Error('出生时需在 0–23 之间');
+      if (min === null || min < 0 || min > 59) throw new Error('出生分需在 0–59 之间');
+      var lat = numField(root, 'lat');
+      if (lat !== null && (lat < -90 || lat > 90)) throw new Error('出生地纬度需在 -90–90 之间');
+      var out = { y: y, m: m, d: d, hour: hour, min: min };
+      if (lng !== null) out.lng = lng;
+      if (lat !== null) out.lat = lat;
+      return out;
+    }
+
+    var hourSel = root.querySelector('[data-birth="hour"]');
+    if (!hourSel) throw new Error('缺少出生时辰选择器');
+    var hourIndex = Number(hourSel.value);
+    if (!Number.isInteger(hourIndex) || hourIndex < -1 || hourIndex > 11) throw new Error('请选择出生时辰');
+    var genderSel = root.querySelector('[data-birth="gender"]');
+    var gender = genderSel && genderSel.value === '女' ? '女' : '男';
+    var inputs = { y: y, m: m, d: d, hourIndex: hourIndex, gender: gender };
+    if (lng !== null) inputs.location = { lng: lng };
+    return inputs;
+  }
+
+  /* 起局时刻表单（奇门/六壬/梅花时间起卦）：默认现在，可改为心中所念的时刻 */
+  function momentForm(container, opts) {
+    if (!container) return;
+    var o = opts || {};
+    var now = o.now ? new Date(o.now) : new Date();
+    container.innerHTML = '<div class="form-grid">' +
+      '<label class="field-cell span-2"><span class="field-label">起局时刻（本地时间，默认现在）</span>' +
+      '<input class="field" type="datetime-local" data-moment="at" value="' + localMinute(now) + '"></label>' +
+      '</div>';
+  }
+
+  function readMomentForm(root) {
+    var el = root.querySelector('[data-moment="at"]');
+    var v = el ? String(el.value || '').trim() : '';
+    if (!v) return undefined;                       // 空 → 交给服务端用当前时刻
+    var d = new Date(v);
+    if (Number.isNaN(d.getTime())) throw new Error('起局时刻格式不正确');
+    return d.toISOString();
+  }
+
+  /* 六爻/梅花共用：爻题、爻象、单爻行、整卦（lines 自下而上，1=阳 0=阴；move 为 1-based 动爻） */
+  function yaoTi(bit, i) {
+    if (i === 0) return '初' + (bit ? '九' : '六');
+    if (i === 5) return '上' + (bit ? '九' : '六');
+    return (bit ? '九' : '六') + ['', '二', '三', '四', '五'][i];
+  }
+
+  function yaoXiang(bit) {
+    return bit ? '▅▅▅▅▅' : '▅▅　▅▅';
+  }
+
+  function guaRow(bit, i, opts) {
+    var o = opts || {};
+    var cls = 'yao-row' + (o.cls ? ' ' + o.cls : '');
+    var marks = o.marks || '';
+    if (o.move === i + 1) marks += '<span class="dong-mark">' + (bit ? '○' : '×') + '<span class="dong-txt">动</span></span>';
+    return '<div class="' + cls + '" style="--i:' + i + '">' +
+      '<span class="yao-ti">' + yaoTi(bit, i) + '</span>' +
+      '<span class="yao-xiang">' + yaoXiang(bit) + '</span>' +
+      '<span class="yao-marks">' + marks + '</span>' +
+      '</div>';
+  }
+
+  function hexagramHTML(o) {
+    o = o || {};
+    var lines = o.lines || [];
+    var rows = '';
+    for (var i = 5; i >= 0; i--) {
+      rows += guaRow(lines[i] ? 1 : 0, i, {
+        move: o.move,
+        marks: o.marks && o.marks[i] ? o.marks[i] : ''
+      });
+    }
+    return '<div class="hexagram">' +
+      '<p class="hexagram-title">' + esc(o.title || '') + '</p>' + rows + '</div>';
+  }
+
   /* ---------------- 初始化 ---------------- */
 
   function init() {
@@ -447,6 +616,17 @@
     wireAi: wireAi,
     wireModelPicker: wireModelPicker,
     loadAiModels: loadAiModels,
-    LS_KEY: LS_KEY
+    LS_KEY: LS_KEY,
+    HOUR_NAMES: HOUR_NAMES,
+    pad2: pad2,
+    hourIndexOfClock: hourIndexOfClock,
+    birthForm: birthForm,
+    readBirthForm: readBirthForm,
+    momentForm: momentForm,
+    readMomentForm: readMomentForm,
+    yaoTi: yaoTi,
+    yaoXiang: yaoXiang,
+    guaRow: guaRow,
+    hexagramHTML: hexagramHTML
   };
 })();

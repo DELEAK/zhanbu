@@ -1599,3 +1599,206 @@ html[data-perf="high"] #toast.is-show {
     gap: 16px;
   }
 }
+
+/* =========================================================
+   20. 九术盘面组件（新增七术共用词汇）
+   原则：只允许细线 + 底色差，low 模式零动效；入场动画等一律放在
+   [data-perf="high"] 作用域内（verify-static S3 逐条扫描）。
+   ========================================================= */
+
+/* 表单网格：出生信息 / 起局时刻 */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 18px;
+  margin-top: 14px;
+}
+
+.field-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.field-label {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--fg-dim);
+}
+
+.field-cell .field {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.form-grid .span-2 {
+  grid-column: 1 / -1;
+}
+
+/* 盘面容器 */
+.pan {
+  border: 1px solid var(--gold-line);
+  border-radius: var(--r-sm);
+  background: var(--bg-2);
+  padding: 14px 16px 16px;
+  margin-top: 20px;
+}
+
+.pan-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 14px;
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--gold-line);
+  font-size: 12.5px;
+  letter-spacing: 0.08em;
+  color: var(--fg-dim);
+}
+
+.pan-head .pan-title {
+  font-size: 14px;
+  letter-spacing: 0.16em;
+  color: var(--gold);
+}
+
+.pan-head .pan-meta {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.pan-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--pan-cols, 3), minmax(0, 1fr));
+  gap: 1px;
+  border: 1px solid var(--gold-line);
+  background: var(--gold-line);
+}
+
+.pan-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  min-height: 64px;
+  padding: 10px 10px 12px;
+  background: var(--bg-2);
+  box-sizing: border-box;
+}
+
+.pan-cell-title {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--fg-dim);
+}
+
+.pan-cell-main {
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--fg);
+}
+
+.pan-cell-sub {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--fg-dim);
+}
+
+/* 当前项强调（当前大运 / 值符宫 / 命中掌诀 / 当前大限）：静态底色 + 金线，无阴影 */
+.pan-cell.is-key {
+  background: var(--bg-3);
+  border-left: 2px solid var(--gold);
+}
+
+.pan-cell.is-key .pan-cell-title {
+  color: var(--gold);
+}
+
+.gz {
+  font: 400 20px/1.4 var(--font-serif);
+  letter-spacing: 0.06em;
+  color: var(--gold);
+}
+
+.wx {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid var(--gold-line);
+  border-radius: var(--r-sm);
+  background: rgba(201, 168, 76, 0.06);
+  font-size: 12.5px;
+  color: var(--fg-dim);
+}
+
+.star {
+  font-size: 15px;
+  color: var(--fg);
+}
+
+.star.is-minor {
+  font-size: 12.5px;
+  color: var(--fg-dim);
+}
+
+.badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border: 1px solid var(--gold-line);
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--fg-dim);
+}
+
+.badge.is-key {
+  color: var(--gold);
+  border-color: var(--gold);
+}
+
+/* 结果区简要盘面外壳 */
+.chart-brief {
+  margin-top: 18px;
+}
+
+/* 多列布局辅助（三卦并排 / 九宫 / 四课三传） */
+.pan-grid.cols-4 { --pan-cols: 4; }
+.pan-grid.cols-7 { --pan-cols: 7; }
+
+/* 首页入口：牌类单卡整行 */
+.entry-grid--one {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* 精致模式：盘面格错峰淡入（仅 opacity / transform，短时长） */
+@keyframes pan-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+html[data-perf="high"] .pan-cell {
+  animation: pan-in 0.16s ease both;
+  animation-delay: calc(var(--i, 0) * 28ms);
+}
+
+@media (max-width: 640px) {
+  .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .form-grid .span-2 {
+    grid-column: auto;
+  }
+
+  .pan-grid.cols-4,
+  .pan-grid.cols-7 {
+    --pan-cols: 2;
+  }
+}

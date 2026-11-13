@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>观微卜影 · 塔罗与六爻</title>
-<meta name="description" content="个人占卜小站：塔罗牌阵与六爻纳甲，服务端定稿抽牌，双性能模式，无遥测。">
+<title>观微卜影 · 九术</title>
+<meta name="description" content="个人占卜小站：八字、紫微、占星、奇门、六壬、梅花、小六壬、六爻与塔罗，服务端定稿排盘，双性能模式，无遥测。">
 <script>
   try {
     document.documentElement.dataset.perf = localStorage.getItem('divination.perf') === 'high' ? 'high' : 'low';
@@ -31,36 +31,93 @@
 <main class="container">
 
   <section class="hero">
-    <span class="eyebrow">TAROT · LIUYAO</span>
+    <span class="eyebrow">命盘 · 占问 · 牌类</span>
     <h1>◆ 观 微 卜 影 ◆</h1>
-    <p class="sub">塔罗与六爻 · 服务端定稿的自托管占卜小站</p>
+    <p class="sub">九术自托管 · 服务端定稿排盘 · 简要与深度双层</p>
     <hr class="rule">
   </section>
 
-  <section class="entry-grid" aria-label="选择占卜方式">
-    <a class="entry-card" href="/tarot.html">
-      <span class="eyebrow">01 / TAROT</span>
-      <div class="entry-title">塔罗占卜</div>
-      <p class="entry-desc">78 张韦特牌面，牌阵自选，抽牌与正逆位由服务端定稿。</p>
-      <span class="entry-cta">[ 进 入 卜 问 → ]</span>
-    </a>
-    <a class="entry-card" href="/liuyao.html">
-      <span class="eyebrow">02 / LIUYAO</span>
-      <div class="entry-title">六爻起卦</div>
-      <p class="entry-desc">纳甲筮法，摇卦定爻，本卦变卦、世应动爻全列。</p>
-      <span class="entry-cta">[ 进 入 起 卦 → ]</span>
-    </a>
+  <section class="section" aria-label="命盘">
+    <h2 class="step">命盘 · 观其命局</h2>
+    <div class="entry-grid">
+      <a class="entry-card" href="/bazi">
+        <span class="eyebrow">01 / BAZI</span>
+        <div class="entry-title">子平八字</div>
+        <p class="entry-desc">四柱十神，日主旺衰、用神喜忌与大运流年。</p>
+        <span class="entry-cta">[ 进 入 论 命 → ]</span>
+      </a>
+      <a class="entry-card" href="/ziwei">
+        <span class="eyebrow">02 / ZIWEI</span>
+        <div class="entry-title">紫微斗数</div>
+        <p class="entry-desc">十二宫十四主星，生年四化、大限与流年。</p>
+        <span class="entry-cta">[ 进 入 论 命 → ]</span>
+      </a>
+      <a class="entry-card" href="/astrology">
+        <span class="eyebrow">03 / ASTROLOGY</span>
+        <div class="entry-title">西方星盘</div>
+        <p class="entry-desc">七行星落座落宫，相位、庙旺与人生领域。</p>
+        <span class="entry-cta">[ 进 入 观 星 → ]</span>
+      </a>
+    </div>
+  </section>
+
+  <section class="section" aria-label="占问">
+    <h2 class="step">占问 · 决其疑事</h2>
+    <div class="entry-grid">
+      <a class="entry-card" href="/liuyao">
+        <span class="eyebrow">04 / LIUYAO</span>
+        <div class="entry-title">六爻起卦</div>
+        <p class="entry-desc">纳甲筮法，摇卦定爻，本卦变卦、世应动爻全列。</p>
+        <span class="entry-cta">[ 进 入 起 卦 → ]</span>
+      </a>
+      <a class="entry-card" href="/qimen">
+        <span class="eyebrow">05 / QIMEN</span>
+        <div class="entry-title">奇门遁甲</div>
+        <p class="entry-desc">九宫八门九星八神，值符值使断时机与方位。</p>
+        <span class="entry-cta">[ 进 入 起 局 → ]</span>
+      </a>
+      <a class="entry-card" href="/liuren">
+        <span class="eyebrow">06 / LIUREN</span>
+        <div class="entry-title">大六壬</div>
+        <p class="entry-desc">四课三传十二天将，观课体以断人事。</p>
+        <span class="entry-cta">[ 进 入 起 课 → ]</span>
+      </a>
+      <a class="entry-card" href="/meihua">
+        <span class="eyebrow">07 / MEIHUA</span>
+        <div class="entry-title">梅花易数</div>
+        <p class="entry-desc">时间或报数起卦，体用生克、互卦变卦全见。</p>
+        <span class="entry-cta">[ 进 入 起 卦 → ]</span>
+      </a>
+      <a class="entry-card" href="/xiaoliuren">
+        <span class="eyebrow">08 / XIAOLIUREN</span>
+        <div class="entry-title">小六壬</div>
+        <p class="entry-desc">六神掌诀，吉凶、五行与方位，断事简明。</p>
+        <span class="entry-cta">[ 进 入 掐 指 → ]</span>
+      </a>
+    </div>
+  </section>
+
+  <section class="section" aria-label="牌类">
+    <h2 class="step">牌类 · 照其心镜</h2>
+    <div class="entry-grid entry-grid--one">
+      <a class="entry-card" href="/tarot">
+        <span class="eyebrow">09 / TAROT</span>
+        <div class="entry-title">塔罗占卜</div>
+        <p class="entry-desc">78 张韦特牌面，牌阵自选，抽牌与正逆位由服务端定稿。</p>
+        <span class="entry-cta">[ 进 入 卜 问 → ]</span>
+      </a>
+    </div>
   </section>
 
   <hr class="rule">
 
   <details class="deep-panel">
-    <summary><span class="sum-txt">⌄ 抽牌机制与概率</span></summary>
+    <summary><span class="sum-txt">⌄ 排盘机制与双性能模式</span></summary>
     <div class="deep-body">
-      <p><b>抽牌与正逆位：</b>洗牌、抽牌与每张牌的正逆位由服务端计算引擎定稿，前端只负责呈现；78 张牌按所选牌阵抽取，逆位出现概率为 30%。</p>
-      <p><b>问题的作用：</b>问题不改变抽到哪些牌，只影响解读的语境，以及六爻用神候选的推导。</p>
-      <p><b>深度解读：</b>站内不内嵌任何大模型。展开深度解读时会生成一段可复制的 AI 提示词，携带问题、分类与本次盘面事实，可自行粘贴到任意 AI 工具中获取进一步解读。</p>
-      <p><b>双性能模式：</b>「流畅」模式零动画、零阴影，只加载 480 宽 WebP 牌面；「精致」模式启用 3D 翻牌、错峰入场与 1200 宽 AVIF 牌面。两种模式共用同一套后端接口与同一份数据。</p>
+      <p><b>盘面由服务端定稿：</b>九术的排盘、摇卦、抽牌与正逆位全部由服务端计算引擎完成，前端只负责呈现；七术先请求 <code>/api/chart</code> 拿到盘面事实，提示词与 AI 解读使用同一份事实，不重新推算。</p>
+      <p><b>简要与深度两层：</b>落屏先给关键盘面（四柱、十二宫、九宫、四课三传、卦象、掌诀、星盘落宫）；展开深度面板才注入逐柱/逐宫/逐爻证据与可复制的 AI 提示词。</p>
+      <p><b>问题的作用：</b>问题不改变盘面，只影响解读语境与六爻用神候选的推导。</p>
+      <p><b>双性能模式：</b>「流畅」模式零动画、零阴影，只加载 480 宽 WebP 牌面；「精致」模式启用错峰入场与 1200 宽 AVIF 牌面。两种模式共用同一套后端接口与同一份数据。</p>
     </div>
   </details>
 
