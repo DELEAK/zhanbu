@@ -26,6 +26,9 @@ scripts/.pylibs/
 .review-*.mjs
 .probe-*/
 scripts/.probe-*.mjs
+scripts/.smoke.mjs
+scripts/.shots/
+scripts/probe-*.ts
 *.part
 .DS_Store
 

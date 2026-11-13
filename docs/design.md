@@ -1,26 +1,30 @@
-# 设计文档（design.md）——个人占卜小站（塔罗 + 六爻，双性能模式）
+# 设计文档（design.md）——个人占卜小站（九术：塔罗 / 六爻 / 八字 / 紫微 / 奇门 / 六壬 / 梅花 / 小六壬 / 占星，双性能模式）
 
 > 依据：`docs/research.md`（17 条参考、21 条要点）+ 用户原始规范。读者：前端工程师，照本文即可实现，无需再查参考站。
 > 规则：本文中的数值（颜色值、毫秒、像素、选择器）即验收标准；「〔§x〕」指 research.md 对应小节。
-> 日期：2026-11-11。实现形态：无框架原生 HTML/CSS/JS 静态页 + Express 静态托管；计算全部在服务端（观微 guanwei 引擎，`vendor/guanwei/shared/core`）。
+> 日期：2026-11-11（初版：塔罗 + 六爻）；2026-11-13 扩展九术（新增七页与统一起盘 API，见 [plan-nine-arts.md](plan-nine-arts.md)）。实现形态：无框架原生 HTML/CSS/JS 静态页 + Express 静态托管；计算全部在服务端（观微 guanwei 引擎，`vendor/guanwei/shared/core`）。
 >
-> **相关文档**：[research.md](research.md)（本文依据，§5 要点）· [env.md](env.md)（环境与牌面资源）· [verify.md](verify.md)（端到端验证报告）· [README.md](../README.md)（部署与 API 样例）
+> **相关文档**：[research.md](research.md)（本文依据，§5 要点）· [env.md](env.md)（环境与牌面资源）· [verify.md](verify.md)（端到端验证报告，九术验收见 §6）· [plan-nine-arts.md](plan-nine-arts.md)（九术接入计划与验收契约）· [README.md](../README.md)（部署与 API 样例）
 
 ---
 
 ## 0. 总则
 
 1. **视觉一句话**：深底（#0a0a0f）+ 唯一金属色（暗金 #c9a84c）点缀 + 衬线标题 + 大留白 + 1px 细线语汇。金色只做线条/文字/小徽章，**占比 <15%**，禁止大面积金填充。〔§2.1/2.2〕
-2. **动线一句话**：线性状态链，塔罗与六爻共用骨架——「前置输入 → 服务端定稿 → 错峰入场 → 交错翻牌/成卦 → 简要结果（scrollIntoView）→ 深度懒展开 → AI 提示词复制 → 重置」。〔§1.1/1.5〕
+2. **动线一句话**：线性状态链，九术共用骨架——「前置输入 → 服务端定稿 → 错峰入场 → 交错翻牌/成卦/铺盘 → 简要盘面（scrollIntoView）→ 深度懒展开 → AI 提示词复制 → 重置」。塔罗/六爻保留仪式性编排；七术以盘面为主，入场只做格级淡入。〔§1.1/1.5〕
 3. **性能一句话**：双性能模式 `data-perf="low|high"`，low 为默认；low 零动效零 3D、只载 480w WebP、深度不入 DOM；high 才有翻牌 3D、错峰、1200 AVIF。切换不刷新页面、信息零丢失。
 4. **文件布局（建议，前端按此建）**：
    ```
    public/
-     index.html          首页入口
-     tarot.html          塔罗占卜
-     liuyao.html         六爻起卦
-     assets/app.css      全站样式（token + 组件 + 双模式）
-     assets/app.js       全站脚本（状态链 + 模式切换 + 懒注入 + 复制/Toast）
+     index.html          首页入口（九术分组卡）
+     tarot.html          塔罗占卜        liuyao.html       六爻起卦
+     bazi.html           八字命盘        ziwei.html        紫微斗数
+     qimen.html          奇门遁甲        liuren.html       大六壬
+     meihua.html         梅花易数        xiaoliuren.html   小六壬
+     astrology.html      西方星盘
+     assets/styles.css   全站样式（token + 组件 + 双模式 + 第 20 节九术盘面）
+     assets/app.js       全站脚本（状态链 + 模式切换 + 懒注入 + 复制/Toast + 表单助手）
+     assets/{tarot,liuyao,bazi,ziwei,qimen,liuren,meihua,xiaoliuren,astrology}.js  各页脚本
      img/cards/480/<slug>.webp        （构建产物，脚本已就位）
      img/cards/1200/<slug>.webp|.avif
    ```
@@ -28,14 +32,17 @@
 
 ---
 
-## 1. 信息架构与三页面线框
+## 1. 信息架构与页面线框
 
 ### 1.1 站点地图
 
 ```
-index.html（首页入口）
- ├─ tarot.html（塔罗占卜）
- └─ liuyao.html（六爻起卦）
+index.html（首页入口，九术分三组）
+ ├─ 命盘组：bazi.html 八字 · ziwei.html 紫微 · astrology.html 占星
+ ├─ 占问组：liuyao.html 六爻 · qimen.html 奇门 · liuren.html 六壬
+ │          · meihua.html 梅花 · xiaoliuren.html 小六壬
+ └─ 牌类组：tarot.html 塔罗
+运营：admin.html（起占记录，口令保护；不在首页入口暴露）
 公共 chrome：顶栏（站名 + 性能模式 toggle）｜页脚（免责声明 + 机制说明）
 无导航栏之外的栏目；无账号、无历史、无统计。
 ```
@@ -156,6 +163,31 @@ S0 选牌阵 → S1 提问(可选) → [洗牌并抽牌 btn，未选牌阵时 di
 
 爻象字符用 Unicode（`▅▅▅▅▅` / `▅▅　▅▅`），动爻标记 `○`（阳动）/`×`（阴动）——纯文本零图片。变卦爻行在深度面板给（简要只给变卦卦名）。
 
+### 1.5 命盘/占问七页（bazi / ziwei / qimen / liuren / meihua / xiaoliuren / astrology）
+
+七页与塔罗、六爻共用同一骨架与同一套 chrome（顶栏 + 性能 toggle + 页脚免责），差异只在「起盘表单」与本术盘面：
+
+```
+STEP 01 出生 / 起局信息（.form-grid；或 #mode 双模式表单）
+STEP 02 所问之事（可选：textarea#question ≤300 字 + 分类 select + 起盘按钮）
+STEP 03 简要盘面（服务端 chartBrief 定稿）→ details.deep-panel 懒展开「证据 + 提示词 + AI」
+```
+
+| 页面 | 起盘输入 | 简要布局（词汇见 §2.5-12） | 深度内容 |
+|---|---|---|---|
+| bazi.html 八字 | 公历生日 + 时辰索引（含「时辰未知」-1）+ 性别 + 可选经度 | 四柱 4×3（柱名/天干/地支）+ 日主·旺衰·用神 3 格 + 五行（藏干加权）5 格 + 当前大运/流年 2 格 | 逐柱十神·藏干 / 旺衰拆解 / 用神喜忌 / 格局·神煞 / 胎元·命宫·身宫 / 大运 8 步 / 提示词 |
+| ziwei.html 紫微 | 同上（服务端换算农历年干支、农历月日、时辰） | 4×4 十二宫棋盘（地支寅起顺行，命宫起逆布）+ 中心 2×2（五行局/命宫/身宫/紫微落宫/当前大限/昼夜）+ 大限·流年 2 格 | 十二宫事实逐字 / 生年四化落宫 / 辅星全列 / 有效亮度 / 空宫借星 / 格局 / 大限 12 步 / 提示词 |
+| astrology.html 占星 | 公历生日 + 出生时刻（24h）+ 经纬度（默认 116.4/39.9） | 日月升 3 格（上升 `.is-key`）+ 七行星 7 格（星座/度数/宫位/庙旺/逆行） | 十二宫 / 相位 / 庙旺与逆行 / 命盘事实逐字 / 断语 / 提示词 |
+| qimen.html 奇门 | 起局时刻（默认现在，可改为所念之事时刻） | 值符/值使 2 格 + 洛书九宫 3×3（宫号/奇仪/门/星/八神，值符值使宫 `.is-key`） | 局式 / 九宫细目 / 断语 / 提示词 |
+| liuren.html 六壬 | 起课时刻（同上） | 四课 4 格（干上/干阴/支上/支阴）+ 三传 3 格（含天将） | 四课三传与课体说明 / 天地盘十二位 / 十二天将布宫 / 断语 / 提示词 |
+| meihua.html 梅花 | 时间起卦（时刻）或报数起卦（n1/n2/n3 1–999） | 本卦·互卦·变卦 3 格（六爻线条 + 动爻标记）+ 体用 3 格（体/用/生克） | 三卦六爻 / 卦辞象曰 / 体用旺衰 / 断语 / 提示词 |
+| xiaoliuren.html 小六壬 | 时辰起课（公历日期 + 时辰）或报数 | 六掌诀横排（命中 `.is-key`）+ 吉凶/五行/主数/方位 + 断语诗 | 三步推算 / 六神全表 / 诀辞 / 断语 / 提示词 |
+
+契约要点：
+- **前端零计算**：盘面、干支、星曜、宫位、断语全部来自 `POST /api/chart` 的 `resultRaw` 与 `brief`；页面只用 `resultRaw` 查表渲染，`brief` 原样展示并可交叉核对。
+- **记录一致**：结果区 `.result-meta` 展示记录 id（`d_…`）；`/admin.html` 自动出现同一条记录，summary 由服务端 `readingLog.toRow()` 按术生成。
+- **深度懒注入**：`details.deep-panel[data-result="1"]` 首次展开才请求 `/api/prompt`；注入顺序固定为「逐项证据 → AI 解读提示词（textarea + 复制 + AI 按钮）→ AI 输出区」。
+
 ---
 
 ## 2. 设计 token 与组件清单
@@ -213,7 +245,7 @@ S0 选牌阵 → S1 提问(可选) → [洗牌并抽牌 btn，未选牌阵时 di
 - 时长：400–700ms；缓动统一 `cubic-bezier(.4,.2,.2,1)`（翻牌）与 `ease`（入场/过渡）；无弹跳、无旋转装饰。〔§2.1/3.4〕
 - **全部动效声明只出现在 `html[data-perf="high"]` 选择器下**；low 模式补一条防御性 reset（§3.2-1）。只动 `transform`/`opacity`/`max-height`/颜色；禁 `will-change`、禁 `translateZ(0)`。〔§3.4〕
 
-### 2.5 组件清单（8 个必选 + 3 个随页组件）
+### 2.5 组件清单（8 个必选 + 3 个随页 + 3 个九术通用）
 
 **2.5-1 性能模式 toggle**（顶栏右侧）
 - 结构：`<button class="perf-toggle" role="switch" aria-checked="false">性能模式 <b class="perf-state">流畅</b></button>`；文案随状态在「流畅」↔「精致」切换。
@@ -274,6 +306,23 @@ html[data-perf="high"] .deep-panel.is-open .deep-body { max-height: 4000px; opac
 
 **2.5-11 爻位行**（`.yao-row`）：`爻题(九二) + 爻象字符 + 干支 + [六亲][六神] + [世|应] 徽章 + 动爻标记`；行高 44px，1px 底线 `--gold-line`；动爻行标记 `--teal`。
 
+**2.5-12 盘面容器与格子**（`.pan` / `.pan-head` / `.pan-grid` / `.pan-cell`）——九术通用
+- 结构：`<section class="pan"><div class="pan-head"><span class="pan-title">标题</span><span class="pan-meta">副信息</span></div><div class="pan-grid cols-N">…</div></section>`；格内用 `.pan-cell-title / .pan-cell-main / .pan-cell-sub` 三级文字。
+- 样式：`.pan` = `--bg-2` 底 + 1px `--gold-line`；`.pan-grid` 用 `repeat(var(--pan-cols,3), minmax(0,1fr))` + 1px gap（由金线充当分隔线）；`.pan-cell` min-height 64px；`.is-key` = `--bg-3` 底 + 左侧 2px 金线（**静态**，两模式同款——重点不靠动画表达）。列数修饰 `.cols-2/3/4/7`（默认 3）。
+- 内容词汇（**必须复用，不自行发明新类名**）：`.gz`（干支/星座，衬线 20px 暗金）、`.wx`（五行徽章 12.5px）、`.star`（星曜 15px，`.is-minor` 灰 12.5px）、`.badge`（12px 细线标签，`.is-key` 金）、`.mono`（等宽数字/事实行）、`.chart-brief`（简要盘面文字块）。
+
+**2.5-13 表单助手**（`DS.birthForm` / `DS.momentForm`）
+- 出生表单：日期 `input[type=date]` + 时辰 `select`（`-1=时辰未知`，仅八字/紫微）+ 性别 + 可选经度；统一 `.form-grid`（2 列，`.span-2` 跨列），标签 `.field-label`，控件 `.field`。
+- 时刻表单：`input[type=datetime-local]`，预填本地当前分钟；`readMomentForm` 空值 → 请求不带 `datetime`（服务端默认现在）。
+- 校验：日期必需、经度 ±180、纬度 ±90、时 0–23/分 0–59；失败 `throw new Error(可读文案)`，页面 `catch` 后 `DS.showToast`。
+
+**2.5-14 盘面格错峰入场（high 专属）**
+```css
+@keyframes pan-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+html[data-perf="high"] .pan-cell { animation: pan-in .16s ease both; animation-delay: calc(var(--i, 0) * 28ms); }
+```
+- 仅 opacity/translateY（4px 内），单格 ≤0.16s；`--i` 由页面脚本按格序写入；low 用同一份 DOM 静态呈现、零动画。deep 面板展开仍按 §2.5-7 的 `max-height` + `opacity` 过渡（high 专属）。
+
 ---
 
 ## 3. 双性能模式矩阵（CSS 选择器级实现要点）
@@ -305,6 +354,7 @@ html[data-perf="high"] .deep-panel.is-open .deep-body { max-height: 4000px; opac
 | 11 | hover 微动效 | 只换边框/文字色 | 按钮反转 .25s、卡片 `translateY(-4px)` .25s（仅 transform）〔§3.4〕 |
 | 12 | scrollIntoView | `behavior: 'auto'` | `behavior: 'smooth'` |
 | 13 | prefers-reduced-motion | 无需处理（本就无动效） | `@media (prefers-reduced-motion: reduce) { html[data-perf="high"] *, html[data-perf="high"] *::before, html[data-perf="high"] *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; animation-delay: 0ms !important; } }` + JS 翻牌 setTimeout 全部置 0（一次翻完）〔§5-7〕 |
+| 14 | 九术盘面格（`.pan-cell`） | 静态呈现（无入场动画；`.is-key` 底色/金线照常可见） | `pan-in` 0.16s 错峰淡入（`animation-delay: calc(var(--i) * 28ms)`），仅 opacity/translateY(4px)；盘面内容不重排、不跳变 |
 
 ### 3.3 切换语义（不刷新 + 零丢失，逐条保证）
 
@@ -344,6 +394,13 @@ html[data-perf="high"] .deep-panel.is-open .deep-body { max-height: 4000px; opac
 ### 4.4 「一句摘要」生成（塔罗简要层，前端模板）
 
 `{position.name}位：{关键词1}与{关键词2}在此位上提示{正位→「顺势而为」|逆位→「先内观再行动」}。`——固定模板、≤40 字，不含任何断言式预测（合规口径）。
+
+### 4.5 七术（命盘 / 占问）分层
+
+| 层 | 内容（共通 + 本术证据） | 数据来源 |
+|---|---|---|
+| **简要** | `.chart-brief` 服务端文案（逐字，≤1 屏）+ 本术盘面（布局见 §1.5）：四柱 / 棋盘 / 九宫 / 四课三传 / 三卦 / 掌诀 / 日月升 | `POST /api/chart` → `brief` + `resultRaw` |
+| **深度** | ① 逐项证据（逐柱 / 逐宫 / 逐格 / 逐爻 / 逐星），全部取自 `resultRaw` 字段（禁前端推算）② 断语 `duanyu`（无命中规则库时显示服务端兜底文案）③ 时辰未知约束注记（bazi / ziwei）④ **AI 解读提示词** 复制按钮 + AI 输出区 | `resultRaw`、`duanyu`、`POST /api/prompt`、`POST /api/ai-interpret` |
 
 ---
 
@@ -389,6 +446,15 @@ html[data-perf="high"] .deep-panel.is-open .deep-body { max-height: 4000px; opac
 - [ ] §6 禁止项逐条核对通过（重点：Three.js/粒子/rAF/动画库/框架/前端抽牌 0 处）。
 - [ ] 页脚免责声明存在且措辞含「仅供娱乐与自我觉察…不构成医疗、心理、法律或财务决策依据」。
 
+### 5.6 九术验收（T11，明细见 `docs/verify.md` §6）
+
+- [ ] `POST /api/chart` 七术均 200、`id` 以 `d_` 开头、`brief` ≥60 字、`kind` 按命盘/占问正确；非法输入 400 且错误码正确（A1/A6）。
+- [ ] 管理端按 `artId` 可查到该记录且 summary 非空；记录详情 `facts` 与 `brief` 逐字相同（A2/A3）。
+- [ ] `/api/prompt` 九术均含硬约束原文「必须逐字引用下列排盘事实」+ 对应 persona 名 + `brief` 逐字；七术缺 `resultRaw` → 400 `NEED_RESULT`（A4）。
+- [ ] 断语：qimen/liuren/xiaoliuren/bazi/ziwei 非空（A5）；bazi 时辰未知 `hourGZ` 为「未知/空」且提示词含「时辰未知 · 最高约束」，ziwei `correctedHour=-1` 同约束（A7）。
+- [ ] 七页行为：首访 low、起盘出简要盘面、深度展开前 `.deep-body` 为空、展开后 >800 字、含 AI/复制按钮、切换 high↔low 零丢失（E10×7）。
+- [ ] `node scripts/verify-static.mjs`（S1 覆盖十份 HTML）、`node scripts/verify-arts.mjs`（A1–A7）、`VERIFY_BASE=… node scripts/verify-e2e.mjs`（E1–E9 + E10）全绿。
+
 ---
 
 ## 6. 明确禁止项清单
@@ -418,7 +484,10 @@ html[data-perf="high"] .deep-panel.is-open .deep-body { max-height: 4000px; opac
 | 牌库 | `GET /cards` → `TarotCard[]`：`{id,name,nameEn,keywords[],meanings{upright,reversed},deepMeaning{...lifeAreas},image}`；图片 slug 与 `nameEn` 对齐（`scripts/fetch-cards.mjs` 以 nameEn 生成），URL `/img/cards/{480,1200}/<slug>.webp|.avif` |
 | 塔罗深度 | `POST /interpret {cards,spread,question≤300字,category}` → `InterpretationResult{fullText,sections:[{type,title,content}]}` |
 | 六爻 | `LiuyaoResult{yao[],names[],benGua,bianGua,dongYao[],najia{gong,lines:[{gz,ganWx,zhiWx,liuqin,shen,isShi,isYing,kong}],shiPos,yingPos,dayGZ,monthZhi,yuePo[],xunKong[],shiLiQin}}`；`GuaEntry{name,ci,xiang}` |
-| 校验基线 | 牌/爻位数 1–20、问题 ≤300 字；非法入参返回结构化错误码（BAD_SPREAD/BAD_CARDS/BAD_QUESTION 风格）〔§5-15〕 |
+| 七术起盘 | `POST /api/chart {artId,question≤300字,category,inputs}` → `{id:"d_…",artId,kind,question,category,params,resultRaw,brief,yongshen:null,duanyu}`；`kind`：bazi/ziwei/astrology=`mingpan`，其余=`zhanwen`。能力清单：`GET /api/chart/arts` → `{arts:[{artId,label,kind,group,needs,note,schema}]}`（`schema` 即 `CHART_INPUT_SCHEMA` 字段说明） |
+| 七术 resultRaw（字段简表） | bazi：`{yearGZ,monthGZ,dayGZ,hourGZ,dayGan,dayGanWx,strength,wxCount,wxWeighted,shishen[],canggan[],strengthDetail{score,ling,gen,shi,reasons[]},yongshen{wx,shishen,xi,ji,tiaohou,reason},dayun[],qiYun,liunian,shensha[],geju{name,basis},taiyuan,minggong,shengong}`；ziwei：`{ming,palaces,zwStars,fuStars,brightness,effBrightness,sihua,sihuaPos,geju[],borrowedStars,dayun[],curDayunIdx,liunianIdx,liunianPalaceName,dayNight,correctedHour}`；astrology：`{planets,asc,mc,sun,moon,sunSign,moonSign,ascSign,houseSystem,houses[],planetDetails[],aspects[]}`；qimen：`{yin,ju,jqName,dayGZ,hourGZ,xunShou,xunshouName,zfStar,zsMen,zfPalace,zsPalace,pan{1…9:{yi,men,star}},tianYi,shen}`；liuren：`{dayGZ,hourGZ,jiang,jqName,tianpan,ganJi,ke1…ke4,chuan1…chuan3,guiRen,isDay,tianJiang,chuanJiang,keti,ketiNote}`；meihua：`{benGua,huGua,bianGua,move,tiGua,yongGua,tiWx,yongWx,shengke,benYao[],monthWx,tiWangShuai,yongWangShuai,wangShuaiNote}`；xiaoliuren：`{a,b,c,idx,name,detail{ji,wx,num,dir,poem,text}}` |
+| 九术提示词 | `POST /api/prompt {artId,question,category,resultRaw}` → `{artId,question,category,brief,yongshen,duanyu,prompt,…}`；九术均可用，七术必须带 `resultRaw`（缺省 400 `NEED_RESULT`）；persona 由 `agentOf(artId)` 的 `name/role/skills` 展开 |
+| 校验基线 | 牌/爻位数 1–20、问题 ≤300 字；七术：年份 1900–2100、日期须真实存在（2/31 → 400）、`hourIndex` 0–11（八字/紫微另允许 -1 时辰未知）、经度 ±180 / 纬度 ±90、报数 1–999；非法入参返回结构化错误码（BAD_SPREAD/BAD_CARDS/BAD_QUESTION/BAD_INPUTS/BAD_ART/NEED_RESULT）〔§5-15〕 |
 
 > 具体接口挂载路径由后端接入任务定；前端按上述形状消费，字段名不自行发明。
 

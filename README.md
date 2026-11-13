@@ -1,6 +1,6 @@
-# divination-station · 个人占卜小站
+# divination-station · 个人占卜小站（九术）
 
-塔罗 + 周易六爻的自托管占卜站点：**观微 guanwei 后端（vendored，只读）当计算引擎，自写极简 Express 服务与原生前端**。
+塔罗、周易六爻、子平八字、紫微斗数、奇门遁甲、大六壬、梅花易数、小六壬、西方星盘的自托管占卜站点：**观微 guanwei 后端（vendored，只读）当计算引擎，自写极简 Express 服务与原生前端**。
 抽牌、正逆位、起卦、纳甲装卦、断语引证全部在服务端定稿，前端零计算、零历法库；AI 解读默认 = 生成一段提示词供复制，**不内嵌 LLM**；配置任一厂商的 API Key（MiMo / MiniMax / DeepSeek / 任意 OpenAI 兼容）后可一键由服务端生成解读全文（见 [4.7](#47-post-apiai-interpretai-深度解读--多厂商-llm)）。
 
 ```text
@@ -21,27 +21,36 @@ divination-station/
 │   └── services/llm.ts         # 多厂商 LLM 客户端（MiMo/MiniMax/DeepSeek/任意 OpenAI 兼容）；Key 只留服务端
 ├── vendor/guanwei/             # 观微后端（上游，禁止修改：只读挂载）
 ├── shared/…（见 vendor 内）      # 排盘引擎 / 牌库 / 断语库
-├── public/                     # 前端静态站：index.html、tarot.html、liuyao.html、/img/cards
+├── public/                     # 前端静态站：九术入口 + 9 个页面 + /img/cards
+│   ├── index.html              # 首页：命盘 / 占问 / 牌类 九卡入口
+│   ├── tarot.html  liuyao.html # 牌类与六爻（t6 已建）
+│   ├── bazi.html  ziwei.html   # 子平八字 / 紫微斗数
+│   ├── qimen.html liuren.html  # 奇门遁甲 / 大六壬
+│   ├── meihua.html xiaoliuren.html  # 梅花易数 / 小六壬
+│   ├── astrology.html admin.html    # 西方星盘 / 记录管理
+│   └── assets/                 # app.js（公共助手 DS）+ 9 个页面脚本 + styles.css
 ├── data/                       # ★ 运行期数据（guanwei.db，SQLite；已 gitignore）
 ├── scripts/                    # 牌面图片抓取与编码 + 验证脚本（禁止修改业务逻辑）
 ├── .gitignore                  # 忽略 node_modules / data/ / .card-cache / .pylibs 等
-└── docs/                       # 调研 / 设计 / 环境 / 验证 四份文档（见下方文档导航）
+└── docs/                       # 调研 / 设计 / 环境 / 验证 / 九术计划 五份文档（见下方文档导航）
 ```
 
-**文档导航（四份文档互相链接）**
+**文档导航（五份文档互相链接）**
 
 | 文档 | 内容 | 与其他文档的关系 |
 |---|---|---|
 | [docs/research.md](docs/research.md) | 参考网站调研：17 条参考（含可借鉴/不可借鉴）+ 21 条可落设计要点 | 下游输入 → design.md |
-| [docs/design.md](docs/design.md) | 设计文档：IA 与三页面线框、设计 token、双性能模式矩阵、30 条验收清单 | 依据 research.md；实现由 verify.md 核验 |
+| [docs/design.md](docs/design.md) | 设计文档：九术 IA 与页面线框、盘面组件、设计 token、双性能模式矩阵、验收清单 | 依据 research.md；实现由 verify.md 核验 |
 | [docs/env.md](docs/env.md) | 环境与牌面资源：网络故障诊断与解法、重跑命令、78 行 slug↔中英文映射 | 支撑 `fetch:cards` / `encode:cards` 图片链路 |
-| [docs/verify.md](docs/verify.md) | 端到端验证报告：8 条验收 + 双模式行为测试 + 2 条披露 | 核验 design.md 验收清单与本文 API 样例 |
+| [docs/verify.md](docs/verify.md) | 端到端验证报告：t6 的 8 条验收 + **九术 A1–A7 / E10 验收（§6）** | 核验 design.md 验收清单与本文 API 样例 |
+| [docs/plan-nine-arts.md](docs/plan-nine-arts.md) | 九术接入计划：契约、页面规格、任务表与验收 | 本阶段实现的唯一依据 |
 
 复核命令（详见 [docs/verify.md](docs/verify.md)）：
 
 ```bash
-node scripts/verify-static.mjs   # 静态检查 5 项（禁项/低性能 CSS/资源）
-node scripts/verify-e2e.mjs      # Firefox BiDi 行为测试 7 项（需本机 firefox）
+node scripts/verify-static.mjs   # 静态检查 5 项（禁项/低性能 CSS/10 份 HTML 默认 low）
+node scripts/verify-arts.mjs     # 七术后端验收 A1–A7（需服务已启动 + 管理口令）
+node scripts/verify-e2e.mjs      # Firefox BiDi 行为测试（E1–E9 + E10 七页，需本机 firefox）
 ```
 
 ---
@@ -140,16 +149,23 @@ ssh -p 443 -R 0:127.0.0.1:3903 a.pinggy.io
 
 ---
 
-## 3. 两个入口 URL 与双性能模式
+## 3. 入口 URL 与双性能模式
 
 | 页面 | URL |
 |---|---|
-| 首页（导航） | `http://localhost:3901/` |
-| **塔罗入口** | `http://localhost:3901/tarot.html` |
-| **六爻入口** | `http://localhost:3901/liuyao.html` |
+| 首页（九术导航） | `http://localhost:3901/` |
+| **塔罗** | `http://localhost:3901/tarot.html` |
+| **六爻** | `http://localhost:3901/liuyao.html` |
+| **子平八字** | `http://localhost:3901/bazi.html` |
+| **紫微斗数** | `http://localhost:3901/ziwei.html` |
+| **奇门遁甲** | `http://localhost:3901/qimen.html` |
+| **大六壬** | `http://localhost:3901/liuren.html` |
+| **梅花易数** | `http://localhost:3901/meihua.html` |
+| **小六壬** | `http://localhost:3901/xiaoliuren.html` |
+| **西方星盘** | `http://localhost:3901/astrology.html` |
 | 记录管理（可选） | `http://localhost:3901/admin.html`（需 `DIVINATION_ADMIN_TOKEN`） |
 
-（`/tarot`、`/liuyao` 这类无后缀路径也能访问：静态中间件开了 `extensions:['html']` 补全。）
+（`/bazi`、`/ziwei`、`/qimen`、`/liuren`、`/meihua`、`/xiaoliuren`、`/astrology` 这类无后缀路径也能访问：静态中间件开了 `extensions:['html']` 补全。）
 
 > **局域网访问**：服务默认监听 `0.0.0.0:3901`，把上表 URL 里的 `localhost` 换成本机局域网 IP（如 `http://10.28.136.2:3901/`）即可在手机/其他电脑上打开；确保防火墙放行 `3901/tcp`（Fedora 默认区已放行 1025-65535/tcp）。前端与 API 同源同端口，局域网访问无需额外 CORS 配置。
 
@@ -178,7 +194,7 @@ ssh -p 443 -R 0:127.0.0.1:3903 a.pinggy.io
 | GET/POST | `/api/prompt` | 生成可直接粘贴给 LLM 的中文提示词（盘面事实 + 古籍引证 + 用神候选） |
 | POST | `/api/ai-interpret` | **AI 深度解读**：用与 `/api/prompt` 相同的提示词调用 LLM 生成解读全文（需配置任一厂商的 Key；未配置返回 503；可带 `provider`/`model` 临时换模型） |
 | GET | `/api/ai-models` | 可选模型清单（各厂商 + 该厂商的模型；Ollama 为本地实时 `/models`），供页面上手选 |
-| GET | `/api/admin/records` | 记录列表（`?limit&offset&artId=all\|tarot\|liuyao`），需 `x-admin-token` 或 `?token=` |
+| GET | `/api/admin/records` | 记录列表（`?limit&offset&artId=all\|tarot\|liuyao\|bazi\|ziwei\|qimen\|liuren\|meihua\|xiaoliuren\|astrology`），需 `x-admin-token` 或 `?token=` |
 | GET | `/api/admin/records/:id` | 单条完整记录（盘面 / 盘面事实 / 古籍引证 / AI 解读 / 来源） |
 | POST | `/api/admin/records/:id/interpret` | 用存档盘面补生成 AI 解读并写回该记录（需配置任一厂商的 Key） |
 | GET | `/api/admin/export.csv` | 导出 CSV（UTF-8 BOM，Excel 直接打开） |
@@ -350,7 +366,7 @@ curl -s -X POST -H 'Content-Type: application/json' \
 
 ### 4.6 `GET|POST /api/prompt`（AI 解读提示词）
 
-入参（GET 用 query、POST 用 JSON）：`artId`（`liuyao`|`tarot`，默认 `liuyao`）、`question`、`category`（可空：综合/感情/事业/财运/学业/健康/人际…）、`spread`（塔罗牌阵 id）、`resultRaw`（六爻盘，**缺省则服务端现起一卦**）、`cards`+`spread`（塔罗已抽的盘，**缺省则服务端现抽**）。
+入参（GET 用 query、POST 用 JSON）：`artId`（九术之一，默认 `liuyao`）、`question`、`category`（可空：综合/感情/事业/财运/学业/健康/人际…）、`spread`（塔罗牌阵 id）、`resultRaw`（盘面：**七术必填**，缺省返回 400 `NEED_RESULT`；六爻缺省则服务端现起一卦）、`cards`+`spread`（塔罗已抽的盘，**缺省则服务端现抽**）。七术会按 `agentOf(artId)` 注入对应 persona（子平命理师/紫微斗数专家/奇门遁甲师/大六壬课师/梅花易数家/掌诀占时师/古典占星师），并保留「必须逐字引用下列排盘事实」硬约束；八字/紫微时辰未知时注入「时辰未知 · 最高约束」。
 
 组成：`chartBrief` 的盘面事实（唯一可信数据源） + vendor `duanyuPromptBlock` 古籍引证 + 自写六爻用神候选推导。
 
@@ -494,6 +510,24 @@ curl -s -X POST -H 'Content-Type: application/json' \
 | 无匹配 | **以世爻为候选** |
 
 每个候选都给出**爻位（初/二/…/上）+ 纳甲干支 + 六亲 + 六神 + 世/应/动/旬空**；用神不上卦时提示「须寻伏神，勿自行补造」，不自行编造爻。
+
+### 4.6.1 `POST /api/chart`（七术统一起盘）
+
+```bash
+# 八字（公历生日 + 时辰序号 0=子 … 11=亥，-1=时辰未知）
+curl -s -X POST http://127.0.0.1:3901/api/chart -H 'Content-Type: application/json' \
+  -d '{"artId":"bazi","question":"今年事业如何","category":"事业","inputs":{"y":1990,"m":6,"d":15,"hourIndex":6,"gender":"男"}}'
+
+# 奇门 / 六壬（起局时刻，缺省现在）
+curl -s -X POST http://127.0.0.1:3901/api/chart -H 'Content-Type: application/json' \
+  -d '{"artId":"qimen","question":"明日面试是否顺利","category":"事业","inputs":{"datetime":"2026-11-13T10:30:00+08:00"}}'
+
+# 梅花 / 小六壬（报数起卦）
+curl -s -X POST http://127.0.0.1:3901/api/chart -H 'Content-Type: application/json' \
+  -d '{"artId":"meihua","question":"合作能否谈成","category":"事业","inputs":{"mode":"number","n1":7,"n2":13,"n3":5}}'
+```
+
+`GET /api/chart/arts` 返回七术能力清单（`label`/`kind`/`group`/`needs`/`schema`，`schema` 即入参说明）。响应：`{id,artId,kind,question,category,params,resultRaw,brief,yongshen,duanyu}`；`kind` 为 `mingpan`（八字/紫微/占星）或 `zhanwen`（奇门/六壬/梅花/小六壬）。输入归一化与校验见 `server/services/chartInputs.ts`：年份 1900–2100、日期真实存在（2/31 会 400）、`hourIndex` 0–11（八字/紫微允许 -1）、报数 1–999、经度 ±180、纬度 ±90、问题 ≤300 字。错误码：`BAD_ART` / `BAD_INPUTS`（含 `field`）/ `BAD_QUESTION` / `INTERNAL`（不泄漏堆栈）。
 
 ### 4.7 `POST /api/ai-interpret`（AI 深度解读 · 多厂商 LLM）
 
@@ -666,6 +700,11 @@ curl -s -X POST -H 'Content-Type: application/json' -d '{"question":"我今年�
   http://127.0.0.1:3901/api/liuyao                   # 200 {id,question,brief,resultRaw} + 入库
 curl -s -G http://127.0.0.1:3901/api/prompt --data-urlencode 'question=我今年下半年的财运如何' \
   --data-urlencode 'category=财运'                    # 200 含逐字引用硬约束 + 用神候选
+curl -s -X POST http://127.0.0.1:3901/api/chart -H 'Content-Type: application/json' \
+  -d '{"artId":"bazi","question":"今年事业如何","inputs":{"y":1990,"m":6,"d":15,"hourIndex":6,"gender":"男"}}' \
+  | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);console.log(j.id, j.brief.length, j.duanyu.length)})'  # d_ 开头 / brief 609 / 断语 253
+VERIFY_BASE=http://127.0.0.1:3905 node scripts/verify-arts.mjs   # 七术 A1–A7 全绿
+VERIFY_BASE=http://127.0.0.1:3905 node scripts/verify-e2e.mjs    # E1–E9 + E10×7 全绿
 curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3901/img/cards/480/the-fool.webp   # 200 image/webp
 curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3901/img/cards/1200/the-fool.avif  # 200 image/avif
 curl -s -X POST -H 'Content-Type: application/json' -d '{bad json' \
@@ -677,4 +716,4 @@ curl -s http://127.0.0.1:3901/api/does-not-exist     # 404 {"error":"NOT_FOUND",
 
 ## 9. 免责声明
 
-本内容仅供娱乐与自我参考，不构成医疗、法律、财务建议；站内不提供账号、历史归档、付费与限额，也不内嵌任何 LLM。
+本内容（含九术盘面与断语）仅供娱乐与自我参考，不构成医疗、法律、财务建议；站内不提供账号与付费限额，也不内嵌任何 LLM。
