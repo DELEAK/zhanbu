@@ -12,6 +12,7 @@ import { createDivination } from '../../vendor/guanwei/server/src/services/divin
 import { recordAccess } from '../services/readingLog.ts';
 import { clientIp } from '../services/guard.ts';
 import { ART_META, CHART7_ARTS, InputError, normalizeChartInputs } from '../services/chartInputs.ts';
+import { LUCKY_ARTS, findLucky, type LuckyArt } from '../services/lucky.ts';
 
 const LOCAL_USERNAME = 'local';
 const MAX_QUESTION = 300;
@@ -116,6 +117,88 @@ router.post('/', (req, res) => {
     });
   } catch (e: any) {
     console.error(`[chart] ${normalized.artId} 排盘失败:`, e?.message || e);
+    return res.status(500).json({ error: 'INTERNAL', message: '排盘失败，请稍后再试' });
+  }
+});
+
+// POST /api/chart/lucky —— 定向起盘（内部能力，不对外宣传）
+// 入参与 POST /api/chart 相同（artId/question/category/inputs），返回形态也相同，
+// 只是服务端会在输入附近找一个「比平好一点」的真实盘面；前端因此可完全复用普通渲染。
+router.post('/lucky', (req, res) => {
+  const body = (req.body || {}) as Record<string, unknown>;
+  const artId = body.artId;
+
+  if (typeof artId !== 'string' || !(LUCKY_ARTS as readonly string[]).includes(artId)) {
+    return res.status(400).json({
+      error: 'BAD_ART',
+      message: `该入口暂不支持 ${String(artId)}（仅 qimen / liuren / meihua / xiaoliuren）`,
+    });
+  }
+
+  const question = trimText(body.question, MAX_QUESTION);
+  if (body.question != null && String(body.question).trim().length > MAX_QUESTION) {
+    return res.status(400).json({ error: 'BAD_QUESTION', message: `所问之事请控制在 ${MAX_QUESTION} 字以内` });
+  }
+  const category = trimText(body.category, MAX_CATEGORY);
+
+  let hit: ReturnType<typeof findLucky>;
+  try {
+    hit = findLucky({
+      artId: artId as LuckyArt,
+      category,
+      inputs: body.inputs as Record<string, unknown> | undefined,
+      windowMinutes: body.windowMinutes as number | undefined,
+      maxAttempts: body.maxAttempts as number | undefined,
+    });
+  } catch (e) {
+    if (e instanceof InputError) {
+      return res.status(400).json({ error: 'BAD_INPUTS', message: e.message, field: e.field });
+    }
+    console.error('[chart] 定向起盘异常:', e);
+    return res.status(500).json({ error: 'INTERNAL', message: '排盘参数异常，请稍后再试' });
+  }
+
+  if (!hit) {
+    return res.status(404).json({ error: 'NO_CHART', message: '附近没有合适的盘面，请换个时刻或报数再试' });
+  }
+
+  try {
+    const params = {
+      source: 'server-calc',
+      inputs: hit.inputs,
+      at: hit.at,
+      attempts: hit.attempts,
+    };
+
+    const record = createDivination({
+      username: LOCAL_USERNAME,
+      artId: hit.artId,
+      kind: 'zhanwen',
+      question: question || undefined,
+      params,
+      resultRaw: hit.resultRaw,
+    });
+
+    recordAccess(record.id, {
+      ip: clientIp(req),
+      ua: req.headers['user-agent'] as string,
+      referer: req.headers['referer'] as string,
+    });
+
+    return res.json({
+      id: record.id,
+      artId: hit.artId,
+      kind: 'zhanwen',
+      question: question || null,
+      category: category || null,
+      params,
+      resultRaw: hit.resultRaw,
+      brief: hit.brief,
+      yongshen: null,
+      duanyu: hit.duanyu || fallbackDuanyu(hit.artId),
+    });
+  } catch (e: any) {
+    console.error(`[chart] ${hit.artId} 定向盘落库失败:`, e?.message || e);
     return res.status(500).json({ error: 'INTERNAL', message: '排盘失败，请稍后再试' });
   }
 });

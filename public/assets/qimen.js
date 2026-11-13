@@ -164,7 +164,7 @@
     btn.disabled = true;
     btn.textContent = '起局…';
     try {
-      var chart = await DS.post('/api/chart', {
+      var chart = await DS.post(DS.isLucky() ? '/api/chart/lucky' : '/api/chart', {
         artId: 'qimen',
         question: state.question || undefined,
         category: state.category,

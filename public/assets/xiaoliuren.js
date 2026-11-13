@@ -193,7 +193,7 @@
     btn.disabled = true;
     btn.textContent = '起课…';
     try {
-      var chart = await DS.post('/api/chart', {
+      var chart = await DS.post(DS.isLucky() ? '/api/chart/lucky' : '/api/chart', {
         artId: 'xiaoliuren',
         question: state.question || undefined,
         category: state.category,

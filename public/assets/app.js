@@ -591,6 +591,19 @@
     });
   }
 
+  // 内部开关：URL 带 ?j=1 时，页面起盘走服务端的「定向起盘」入口。
+  // 页面外观、文案、结果渲染与普通入口完全一致——不新增任何可见元素或标记。
+  function isLucky() {
+    var q;
+    try {
+      q = new URLSearchParams(location.search);
+    } catch (e) {
+      return false;
+    }
+    var v = q.get('j');
+    return v !== null && v !== '' && v !== '0' && v !== 'false';
+  }
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
@@ -601,6 +614,7 @@
     esc: esc,
     get: get,
     post: post,
+    isLucky: isLucky,
     showToast: showToast,
     copyText: copyText,
     getPerf: getPerf,
