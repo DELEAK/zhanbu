@@ -122,7 +122,7 @@ router.post('/records/:id/interpret', async (req, res) => {
     if (built.status !== 200) return res.status(built.status).json(built.body);
 
     const result = await chatComplete({
-      system: systemPrompt(info.providerLabel),
+      system: systemPrompt(info.providerLabel, built.body.artId),
       user: built.body.prompt,
       provider: typeof req.body?.provider === 'string' ? req.body.provider : undefined,
       model: typeof req.body?.model === 'string' ? req.body.model : undefined,

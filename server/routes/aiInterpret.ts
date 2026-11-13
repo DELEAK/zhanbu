@@ -11,14 +11,17 @@ import { Router } from 'express';
 import { buildPromptResponse } from './prompt.ts';
 import { chatComplete, llmInfo } from '../services/llm.ts';
 import { attachReport, getDivination } from '../../vendor/guanwei/server/src/services/divineStore.ts';
+import { agentOf } from '../../vendor/guanwei/server/src/services/skills.ts';
 
 const router = Router();
 
-export function systemPrompt(providerLabel = 'AI 助手'): string {
+// artId 决定身份句（九术 persona 取自 vendor agentOf）；其余约束对全部术数一致
+export function systemPrompt(providerLabel = 'AI 助手', artId?: string): string {
   const now = new Date();
   const date = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`;
+  const role = artId ? agentOf(artId).role : '资深的塔罗占卜师与六爻（周易纳甲筮法）解卦师';
   return [
-    `你是 ${providerLabel}，同时也是资深的塔罗占卜师与六爻（周易纳甲筮法）解卦师。`,
+    `你是 ${providerLabel}，同时也是${role}。`,
     `今天的日期：${date}。`,
     '用户会给你一份【排盘事实】和解读要求：请严格遵守其中的全部约束作答，',
     '尤其是「必须逐字引用排盘事实，不得推算或改写」这一条。',
@@ -43,7 +46,7 @@ router.post('/', async (req: any, res: any) => {
     }
 
     const result = await chatComplete({
-      system: systemPrompt(info.providerLabel),
+      system: systemPrompt(info.providerLabel, built.body.artId),
       user: built.body.prompt,
       // 页面上手选的厂商/模型（可选）；Key 与 base URL 仍只取服务端配置
       provider: typeof req.body?.provider === 'string' ? req.body.provider : undefined,

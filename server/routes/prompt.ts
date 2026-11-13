@@ -3,14 +3,16 @@
 // 组成：chartBrief 的盘面事实（可引用域） + vendor duanyuPromptBlock（古籍断语引证）
 //      + 自写的六爻用神候选推导（server/services/yongshen.ts）
 //
-// 入参（GET 用 query，POST 用 JSON；POST 可携带已抽好的盘面，保证提示词与页面显示一致）：
-//   artId    'liuyao' | 'tarot'，默认 'liuyao'
+// 入参（GET 用 query，POST 用 JSON；POST 可携带已排好的盘面，保证提示词与页面显示一致）：
+//   artId    九术之一（默认 'liuyao'）：bazi/ziwei/astrology/qimen/liuren/meihua/xiaoliuren（七术需带 resultRaw）
+//            + 既有 liuyao/tarot
 //   question 所问之事（可空，≤300 字）
 //   category 问题分类（可空，≤20 字：综合/感情/事业/财运/学业/健康/人际…；影响六爻用神候选）
 //   spread   牌阵 id（仅 tarot；缺省时服务端现抽一副）
 //   cards    POST：/api/tarot/draw 返回的 DrawnCard[]（{cardId,isReversed,positionId}）
 //   spread   POST：/api/tarot/draw 返回的 spread 对象（与上面的 cards 配套）
-//   resultRaw POST：/api/liuyao 返回的 resultRaw（缺省时服务端现起一卦）
+//   resultRaw POST：/api/chart（七术）或 /api/liuyao 返回的 resultRaw
+//            七术必须携带（否则 400 NEED_RESULT：提示词必须与页面同一盘面）；六爻缺省时服务端现起一卦
 import { Router } from 'express';
 import { chartCalc } from '../../vendor/guanwei/shared/core/engine/chart.ts';
 import { chartBrief } from '../../vendor/guanwei/server/src/services/chartBrief.ts';
@@ -18,8 +20,10 @@ import { duanyuPromptBlock } from '../../vendor/guanwei/server/src/services/duan
 import { tarotCards } from '../../vendor/guanwei/shared/core/data/tarotCards.ts';
 import { withImages } from './tarotCards.ts';
 import { deriveYongshen } from '../services/yongshen.ts';
+import { hourUnknownBlock, outputBlock, personaBlock } from '../services/promptTemplates.ts';
+import { isChart7Art } from '../services/chartInputs.ts';
 
-type ArtId = 'liuyao' | 'tarot';
+type ArtId = 'liuyao' | 'tarot' | 'bazi' | 'ziwei' | 'astrology' | 'qimen' | 'liuren' | 'meihua' | 'xiaoliuren';
 const MAX_QUESTION = 300;
 const router = Router();
 
@@ -121,16 +125,47 @@ function tarotPrompt(question: string, brief: string, duanyu: string, category: 
   return L.join('\n');
 }
 
+// 九术通用提示词：persona（vendor agentOf）+ 硬约束 + 盘面事实 + 断语 + 输出要求（命盘/占问分叉）
+function chartPrompt(artId: string, question: string, brief: string, duanyu: string, category: string, resultRaw: unknown): string {
+  const L: string[] = [];
+  L.push(...personaBlock(artId));
+  L.push('');
+  L.push(...HARD_RULES_COMMON);
+  L.push('');
+  L.push('【所问之事】' + (question ? question : '（未提供：若为命盘类按「论命」处理，先给总评再分维度；若为占问类按「问事不明」处理，先说明可补问的方向）'));
+  if (category) L.push('【问题分类】' + category);
+  L.push('');
+  L.push('【排盘事实】');
+  L.push(brief);
+  L.push('');
+  const hourNote = hourUnknownBlock(artId, resultRaw);
+  if (hourNote) { L.push(hourNote); L.push(''); }
+  if (duanyu) { L.push(duanyu); L.push(''); }
+  L.push(...outputBlock(artId));
+  L.push('');
+  L.push('【免责声明】本内容仅供娱乐与自我参考，不构成医疗、法律、财务建议。');
+  return L.join('\n');
+}
+
 function parseArtId(v: any): ArtId | null {
   const s = String(v ?? 'liuyao').toLowerCase();
-  return s === 'tarot' || s === 'liuyao' ? s : null;
+  if (s === 'liuyao' || s === 'tarot') return s as ArtId;
+  return isChart7Art(s) ? s : null;
 }
 
 // 构建提示词响应（/api/prompt 与 /api/ai-interpret 共用，保证 AI 解读与「复制提示词」口径一致）
 export function buildPromptResponse(src: any): { status: number; body: any } {
   try {
     const artId = parseArtId(src.artId);
-    if (!artId) return { status: 400, body: { error: 'BAD_ART', message: "artId 只能是 'liuyao' 或 'tarot'" } };
+    if (!artId) {
+      return {
+        status: 400,
+        body: {
+          error: 'BAD_ART',
+          message: 'artId 只支持九术：bazi/ziwei/astrology/qimen/liuren/meihua/xiaoliuren/liuyao/tarot',
+        },
+      };
+    }
 
     const question = src.question == null || src.question === '' ? undefined : String(src.question).trim();
     if (question && question.length > MAX_QUESTION) {
@@ -155,7 +190,7 @@ export function buildPromptResponse(src: any): { status: number; body: any } {
       duanyu = duanyuPromptBlock('liuyao', yongshen?.primary?.liuqin ? { ...(resultRaw as any), yongshen: yongshen.primary.liuqin } : resultRaw) || '';
       prompt = liuyaoPrompt(question || '', brief, yongshen?.text || '', duanyu, category);
       payload = { resultRaw };
-    } else {
+    } else if (artId === 'tarot') {
       const incoming = src.resultRaw && typeof src.resultRaw === 'object'
         ? src.resultRaw
         : (src.cards ? { cards: src.cards, spread: src.spread } : null);
@@ -164,6 +199,22 @@ export function buildPromptResponse(src: any): { status: number; body: any } {
       duanyu = duanyuPromptBlock('tarot', { cards: t.cards, spread: t.spread }) || '';
       payload = { cards: t.cards, spread: t.spread };
       prompt = tarotPrompt(question || '', brief, duanyu, category);
+    } else {
+      // 七术：必须带页面已排好的 resultRaw —— 不接受服务端现排，保证提示词与页面盘面完全一致
+      const resultRaw = src.resultRaw && typeof src.resultRaw === 'object' ? src.resultRaw : null;
+      if (!resultRaw) {
+        return {
+          status: 400,
+          body: {
+            error: 'NEED_RESULT',
+            message: '七术提示词必须携带 resultRaw：请先调用 POST /api/chart 取得盘面事实，再把 resultRaw 一并提交',
+          },
+        };
+      }
+      brief = chartBrief(artId, resultRaw);
+      duanyu = duanyuPromptBlock(artId, resultRaw) || '';
+      payload = { resultRaw };
+      prompt = chartPrompt(artId, question || '', brief, duanyu, category, resultRaw);
     }
 
     return {
@@ -173,7 +224,7 @@ export function buildPromptResponse(src: any): { status: number; body: any } {
         question: question || null,
         category: category || null,
         brief,
-        yongshen,                 // 仅六爻：{primary, candidates, shi, matchedAny, text}；塔罗为 null
+        yongshen,                 // 仅六爻：{primary, candidates, shi, matchedAny, text}；其余术为 null
         duanyu,                   // vendor 断语引证块（无命中时为空串）
         ...payload,               // 六爻：resultRaw；塔罗：cards + spread
         prompt,

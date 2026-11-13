@@ -138,7 +138,9 @@ function locationOf(v: unknown): Record<string, number> | undefined {
 }
 
 function lunarOf(y: number, m: number, d: number, hourIndex: number) {
-  const { hh, mm } = hourIndexToClock(hourIndex);
+  // 时辰未知（-1）只用于 bazi/ziwei 的缺时辰盘：取子时中点兜底换算农历日期
+  const clock = hourIndexToClock(hourIndex < 0 ? 0 : hourIndex);
+  const { hh, mm } = clock;
   const solar = Solar.fromYmdHms(y, m, d, hh, mm, 0);
   const lunar = solar.getLunar();
   return {
@@ -200,7 +202,7 @@ export function normalizeChartInputs(artId: unknown, rawInputs: unknown): Normal
 
   if (artId === 'ziwei') {
     const date = solarOf({ y: i.y, m: i.m, d: i.d }, 'birthDate');
-    const hourIndex = hourIndexOf(i.hourIndex);   // 紫微必须有时辰：无时辰会排假盘
+    const hourIndex = hourIndexOf(i.hourIndex, { allowUnknown: true });   // 紫微支持「时辰未知」（vendor 按缺时辰盘处理）
     const gender = genderOf(i.gender);
     const location = locationOf(i.location);
     const lunar = lunarOf(date.y, date.m, date.d, hourIndex);
