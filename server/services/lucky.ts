@@ -187,7 +187,26 @@ function clampInt(v: unknown, min: number, max: number, dflt: number): number {
   return Math.min(max, Math.max(min, Math.floor(n)));
 }
 
-/** 时间窗搜索：从 base 向两侧按步长取最近候选，命中即返回 */
+/** 随机抽取一个元素 */
+function pickRandom<T>(arr: T[]): T | null {
+  return arr.length ? arr[Math.floor(Math.random() * arr.length)] : null;
+}
+
+/** 洗牌（Fisher–Yates），就地打乱 */
+function shuffleInPlace<T>(arr: T[]): T[] {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+const HIT_TARGET = 12;
+
+/** 时间窗搜索：在窗口内随机抽取候选时刻，收集多个吉盘后随机取其一。
+ *  同一组输入多次请求会得到不同的吉盘（每次重新随机），避免「永远同一个结果」。
+ *  qimen/liuren 逐分钟搜索（默认 720 分钟窗口）；meihua/xiaoliuren 以时辰为步长（120 分钟），
+ *  窗口默认 4320 分钟，否则只有 6 个时辰可选，随机空间太小。 */
 function searchTimeWindow(
   artId: LuckyArt,
   base: Date,
@@ -198,131 +217,149 @@ function searchTimeWindow(
   // 归零秒，保证入参与盘面可复现
   base.setSeconds(0, 0);
 
-  const win = clampInt(windowMinutes, 60, 4320, 720);
+  const defWin = artId === 'qimen' || artId === 'liuren' ? 720 : 4320;
+  const win = clampInt(windowMinutes, 60, 4320, defWin);
   const cap = clampInt(maxAttempts, 10, 3000, 800);
   const step = stepMinutes(artId);
   const maxOffsets = Math.min(Math.floor(win / step), Math.floor(cap / 2));
 
+  const offsets: number[] = [];
   for (let i = 0; i <= maxOffsets; i++) {
-    const offsets = i === 0 ? [0] : [i * step, -i * step];
-    for (const off of offsets) {
-      const t = new Date(base.getTime() + off * 60000);
-      let cast: { inputs: Record<string, unknown>; resultRaw: any };
-      try {
-        cast = castAt(artId, t);
-      } catch {
-        continue;
-      }
-      const brief = chartBrief(artId, cast.resultRaw);
-      const duanyu = duanyuPromptBlock(artId, cast.resultRaw).trim();
-      const verdict = verdictWithBrief(verdictOf(artId, cast.resultRaw, category), brief);
-      if (verdict.tier === 'ji') {
-        return {
-          artId,
-          kind: ART_META[artId].kind as 'zhanwen',
-          inputs: cast.inputs,
-          at: t.toISOString(),
-          attempts: i === 0 ? 1 : i * 2,
-          resultRaw: cast.resultRaw,
-          brief,
-          duanyu,
-          verdict,
-        };
-      }
-    }
+    if (i === 0) offsets.push(0);
+    else offsets.push(i * step, -i * step);
   }
-  return null;
+  shuffleInPlace(offsets);
+
+  const candidates: Array<{
+    inputs: Record<string, unknown>;
+    resultRaw: any;
+    brief: string;
+    verdict: Verdict;
+    at: Date;
+    order: number;
+  }> = [];
+
+  let evaluated = 0;
+  for (let k = 0; k < offsets.length && evaluated < cap; k++) {
+    const t = new Date(base.getTime() + offsets[k] * 60000);
+    evaluated++;
+    let cast: { inputs: Record<string, unknown>; resultRaw: any };
+    try {
+      cast = castAt(artId, t);
+    } catch {
+      continue;
+    }
+    const brief = chartBrief(artId, cast.resultRaw);
+    const verdict = verdictWithBrief(verdictOf(artId, cast.resultRaw, category), brief);
+    if (verdict.tier !== 'ji') continue;
+    candidates.push({ inputs: cast.inputs, resultRaw: cast.resultRaw, brief, verdict, at: t, order: evaluated });
+    if (candidates.length >= HIT_TARGET) break;
+  }
+
+  const chosen = pickRandom(candidates);
+  if (!chosen) return null;
+  return {
+    artId,
+    kind: ART_META[artId].kind as 'zhanwen',
+    inputs: chosen.inputs,
+    at: chosen.at.toISOString(),
+    attempts: chosen.order,
+    resultRaw: chosen.resultRaw,
+    brief: chosen.brief,
+    duanyu: duanyuPromptBlock(artId, chosen.resultRaw).trim(),
+    verdict: chosen.verdict,
+  };
 }
 
-/** 与 n 同余（(x-1) % modVal === residue）且最接近 n 的正整数 */
-function nearestWithResidue(n: number, residue: number, modVal: number): number {
-  const cur = mod(n - 1, modVal);
-  let delta = mod(residue - cur, modVal);
-  if (delta > modVal / 2) delta -= modVal;
-  let cand = n + delta;
-  if (cand < 1) cand += modVal;
-  return cand;
+/** 随机生成一个 1..999 内、且 (x-1) % modVal === residue 的整数 */
+function randomWithResidue(residue: number, modVal: number): number {
+  const first = residue + 1; // 1..modVal
+  const count = Math.floor((999 - first) / modVal) + 1;
+  const k = Math.floor(Math.random() * count);
+  return first + k * modVal;
 }
 
-/** 梅花报数搜索：枚举 8×8×6 种卦象，取体用属吉且改动量最小的一组报数 */
+/** 梅花报数：先收集全部「体用属吉」的卦象（8×8×6），随机取一象，再随机生成同余的报数。
+ *  同一组输入多次请求会得到不同吉卦，避免总是微调到相邻的那一个。 */
 function searchMeihuaNumbers(n1: number, n2: number, n3: number, category?: string): LuckyHit | null {
-  let best:
-    | { delta: number; inputs: Record<string, unknown>; raw: any; brief: string; duanyu: string; verdict: Verdict }
-    | null = null;
+  const combos: Array<{ up: number; lo: number; mv: number; brief: string; verdict: Verdict }> = [];
 
   for (let up = 1; up <= 8; up++) {
     for (let lo = 1; lo <= 8; lo++) {
       for (let mv = 1; mv <= 6; mv++) {
-        const c1 = nearestWithResidue(n1, up - 1, 8);
-        const c2 = nearestWithResidue(n2, lo - 1, 8);
-        const c3 = nearestWithResidue(n3, mv - 1, 6);
-        if (c1 < 1 || c1 > 999 || c2 < 1 || c2 > 999 || c3 < 1 || c3 > 999) continue;
-
-        const inputs = { mode: 'number', n1: c1, n2: c2, n3: c3 };
+        // 以同余代表值探盘：n1=up、n2=lo、n3=mv 恰与目标卦象同余
+        const probe = { mode: 'number', n1: up, n2: lo, n3: mv };
         let raw: any;
         try {
-          raw = chartCalc('meihua', inputs) as any;
+          raw = chartCalc('meihua', probe) as any;
         } catch {
           continue;
         }
         if (!String(raw?.shengke || '').includes('吉')) continue;
-
         const brief = chartBrief('meihua', raw);
-        const duanyu = duanyuPromptBlock('meihua', raw).trim();
         const verdict = verdictWithBrief(verdictOf('meihua', raw, category), brief);
         if (verdict.tier !== 'ji') continue;
-
-        const delta = Math.abs(c1 - n1) + Math.abs(c2 - n2) + Math.abs(c3 - n3);
-        if (!best || delta < best.delta) best = { delta, inputs, raw, brief, duanyu, verdict };
+        combos.push({ up, lo, mv, brief, verdict });
       }
     }
   }
 
-  if (!best) return null;
+  const chosen = pickRandom(combos);
+  if (!chosen) return null;
+
+  const inputs = {
+    mode: 'number',
+    n1: randomWithResidue(chosen.up - 1, 8),
+    n2: randomWithResidue(chosen.lo - 1, 8),
+    n3: randomWithResidue(chosen.mv - 1, 6),
+  };
+  let raw: any;
+  try {
+    raw = chartCalc('meihua', inputs) as any;
+  } catch {
+    return null;
+  }
   return {
     artId: 'meihua',
     kind: 'zhanwen',
-    inputs: best.inputs,
+    inputs,
     at: new Date().toISOString(),
     attempts: 1,
-    resultRaw: best.raw,
-    brief: best.brief,
-    duanyu: best.duanyu,
-    verdict: best.verdict,
+    resultRaw: raw,
+    brief: chosen.brief,
+    duanyu: duanyuPromptBlock('meihua', raw).trim(),
+    verdict: chosen.verdict,
   };
 }
 
-/** 小六壬报数搜索：只微调第三个数（c），取最近且落吉的报数 */
+/** 小六壬报数：先随机选一个吉掌诀（大安/速喜/小吉），再随机生成落在该掌诀的第三个数。
+ *  同一组输入多次请求会落到不同吉掌诀（而不是总取 n3 附近第一个吉）。 */
 function searchXiaoliurenNumbers(n1: number, n2: number, n3: number, category?: string): LuckyHit | null {
-  for (let step = 0; step <= 5; step++) {
-    const candidates = step === 0 ? [n3] : [n3 + step, n3 - step];
-    for (const c of candidates) {
-      if (c < 1 || c > 999) continue;
-      const inputs = { mode: 'number', n1, n2, n3: c };
-      let raw: any;
-      try {
-        raw = chartCalc('xiaoliuren', inputs) as any;
-      } catch {
-        continue;
-      }
-      const brief = chartBrief('xiaoliuren', raw);
-      const duanyu = duanyuPromptBlock('xiaoliuren', raw).trim();
-      const verdict = verdictWithBrief(verdictOf('xiaoliuren', raw, category), brief);
-      if (verdict.tier !== 'ji') continue;
-      return {
-        artId: 'xiaoliuren',
-        kind: 'zhanwen',
-        inputs,
-        at: new Date().toISOString(),
-        attempts: 1,
-        resultRaw: raw,
-        brief,
-        duanyu,
-        verdict,
-      };
-    }
+  const targets = [0, 2, 4]; // 大安 / 速喜 / 小吉
+  const target = targets[Math.floor(Math.random() * targets.length)];
+  // p3 = ((n1-1) + (n2-1) + (n3-1)) mod 6，反解 (n3-1) 的同余
+  const residue = mod(target - n1 - n2 + 2, 6);
+  const inputs = { mode: 'number', n1, n2, n3: randomWithResidue(residue, 6) };
+  let raw: any;
+  try {
+    raw = chartCalc('xiaoliuren', inputs) as any;
+  } catch {
+    return null;
   }
-  return null;
+  const brief = chartBrief('xiaoliuren', raw);
+  const verdict = verdictWithBrief(verdictOf('xiaoliuren', raw, category), brief);
+  if (verdict.tier !== 'ji') return null;
+  return {
+    artId: 'xiaoliuren',
+    kind: 'zhanwen',
+    inputs,
+    at: new Date().toISOString(),
+    attempts: 1,
+    resultRaw: raw,
+    brief,
+    duanyu: duanyuPromptBlock('xiaoliuren', raw).trim(),
+    verdict,
+  };
 }
 
 /** xiaoliuren 时间模式：由原始 {y,m,d,hourIndex} 还原本地时刻；缺省用当前时刻 */

@@ -191,6 +191,7 @@ ssh -p 443 -R 0:127.0.0.1:3903 a.pinggy.io
 | POST | `/api/liuyao` | 服务端按当前时间 + 随机起卦，**并写入 `data/guanwei.db`（含来源 IP/UA）** |
 | GET | `/api/chart/arts` | 七术能力清单：`label` / `kind`（mingpan\|zhanwen）/ `group` / `needs` / `schema` |
 | POST | `/api/chart` | **七术统一起盘**（`bazi`/`ziwei`/`astrology`/`qimen`/`liuren`/`meihua`/`xiaoliuren`）：校验并归一化输入 → 服务端排盘 → 落库 → 返回 `{id,brief,duanyu,resultRaw}` |
+| POST | `/api/chart/lucky` | **内部定向起盘**（`qimen`/`liuren`/`meihua`/`xiaoliuren`）：在输入附近随机取一个「吉」的真实盘面，返回形态与 `/api/chart` 完全相同（页面入口见 §4.6.2，不对外宣传） |
 | GET/POST | `/api/prompt` | 生成可直接粘贴给 LLM 的中文提示词（盘面事实 + 古籍引证 + 用神候选） |
 | POST | `/api/ai-interpret` | **AI 深度解读**：用与 `/api/prompt` 相同的提示词调用 LLM 生成解读全文（需配置任一厂商的 Key；未配置返回 503；可带 `provider`/`model` 临时换模型） |
 | GET | `/api/ai-models` | 可选模型清单（各厂商 + 该厂商的模型；Ollama 为本地实时 `/models`），供页面上手选 |
@@ -528,6 +529,26 @@ curl -s -X POST http://127.0.0.1:3901/api/chart -H 'Content-Type: application/js
 ```
 
 `GET /api/chart/arts` 返回七术能力清单（`label`/`kind`/`group`/`needs`/`schema`，`schema` 即入参说明）。响应：`{id,artId,kind,question,category,params,resultRaw,brief,yongshen,duanyu}`；`kind` 为 `mingpan`（八字/紫微/占星）或 `zhanwen`（奇门/六壬/梅花/小六壬）。输入归一化与校验见 `server/services/chartInputs.ts`：年份 1900–2100、日期真实存在（2/31 会 400）、`hourIndex` 0–11（八字/紫微允许 -1）、报数 1–999、经度 ±180、纬度 ±90、问题 ≤300 字。错误码：`BAD_ART` / `BAD_INPUTS`（含 `field`）/ `BAD_QUESTION` / `INTERNAL`（不泄漏堆栈）。
+
+### 4.6.2 `POST /api/chart/lucky`（内部定向起盘）
+
+> 内部能力：仅用于 `?j=1` 触发的隐藏入口，**不对外宣传**；页面 HTML、渲染与文案与普通入口完全一致（无任何「吉愿/择吉」字样），因此不改变对外观感。
+
+```bash
+# 小六壬报数：服务端在报数空间里随机挑一个落「大安/速喜/小吉」的组合
+curl -s -X POST http://127.0.0.1:3901/api/chart/lucky -H 'Content-Type: application/json' \
+  -d '{"artId":"xiaoliuren","question":"合作能否谈成","category":"事业","inputs":{"mode":"number","n1":3,"n2":8,"n3":11}}'
+
+# 奇门时刻：在起局时刻附近的候选分钟里随机取一个吉盘
+curl -s -X POST http://127.0.0.1:3901/api/chart/lucky -H 'Content-Type: application/json' \
+  -d '{"artId":"qimen","question":"明日面试是否顺利","category":"事业","inputs":{"datetime":"2026-11-13T10:30:00+08:00"},"windowMinutes":720}'
+```
+
+- **入参/出参**：与 `POST /api/chart` 相同（`artId`/`question`/`category`/`inputs`），可额外带 `windowMinutes`（60–4320）与 `maxAttempts`（10–3000）。响应 `{id,artId,kind,question,category,params,resultRaw,brief,yongshen,duanyu}` 与普通起盘完全同形。
+- **随机取吉**：候选时刻（奇门/六壬逐分钟；梅花/小六壬按 120 分钟时辰）或候选卦象先打乱，收集多个吉盘后**随机取其一**——同一组输入多次请求会得到不同的吉盘，不会固定为最近的那一个。默认窗口：奇门/六壬 720 分钟，梅花/小六壬 4320 分钟（时辰粒度需要更大窗口才有变化空间）。
+- **判定**：各术结构化规则（小六壬掌诀、梅花体用、奇门用神门/八神、六壬三传天将/课体）+ **盘面文字交叉校验**（`brief` 含凶词则降为平，宁缺毋滥）；不使用断语文本判定（vendor 断语常整段列总诀，会误伤）。
+- **可复现**：实际命中入参写入记录 `params`（`{inputs, at, attempts}`），事后可用 `POST /api/chart` 重算同一盘。
+- **错误码**：`BAD_ART`（仅四术）、`BAD_INPUTS`、`BAD_QUESTION`；窗口内无解返回 404 `NO_CHART`（正常配置下极少发生）。
 
 ### 4.7 `POST /api/ai-interpret`（AI 深度解读 · 多厂商 LLM）
 
