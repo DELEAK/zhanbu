@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>子平八字 · 观微卜影</title>
+<meta name="description" content="子平八字排盘：四柱十神、日主旺衰、用神喜忌、大运流年，与服务端定稿的盘面事实。">
+<script>
+  try {
+    document.documentElement.dataset.perf = localStorage.getItem('divination.perf') === 'high' ? 'high' : 'low';
+  } catch (e) {
+    document.documentElement.dataset.perf = 'low';
+  }
+</script>
+<link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="container topbar-inner">
+    <div>
+      <a class="brand" href="/">观微卜影</a>
+      <span class="brand-sep">/</span>
+      <span class="brand-page">子平八字</span>
+    </div>
+    <button class="perf-toggle" type="button" role="switch" aria-checked="false" title="切换性能模式">
+      <span class="perf-dot" aria-hidden="true"></span>
+      性能模式 <b class="perf-state">流畅</b>
+    </button>
+  </div>
+</header>
+
+<main class="container">
+
+  <section class="section" id="stepBirth">
+    <h2 class="step">STEP 01 · 出生信息</h2>
+    <p class="hint">公历生日与出生时辰。时辰未知时不下时柱，深度解读会明确标注「因时辰未知，此维度从略」。</p>
+    <div id="birthForm"></div>
+    <div class="form-actions">
+      <button class="btn" id="castBtn" type="button">起 盘</button>
+    </div>
+  </section>
+
+  <section class="section" id="stepQuestion">
+    <h2 class="step">STEP 02 · 所问之事（可选）</h2>
+    <textarea class="field" id="question" rows="3" maxlength="300" placeholder="例如：今年换工作是否顺利？"></textarea>
+    <p class="hint">命盘页的问题只影响解读侧重，不改变排盘。</p>
+    <div class="category-row">
+      <select class="field" id="category" aria-label="解读分类">
+        <option value="综合">综合</option>
+        <option value="感情">感情</option>
+        <option value="事业">事业</option>
+        <option value="财运">财运</option>
+        <option value="学业">学业</option>
+        <option value="健康">健康</option>
+        <option value="人际">人际</option>
+      </select>
+    </div>
+  </section>
+
+  <section id="result" hidden></section>
+
+</main>
+
+<footer>
+  <div class="container">
+    <p class="footer-note">本站内容仅供娱乐与自我觉察，不预测未来，也不构成医疗、心理、法律或财务决策依据。</p>
+    <p class="footer-meta">服务端计算 · 无遥测</p>
+  </div>
+</footer>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="/assets/app.js" defer></script>
+<script src="/assets/bazi.js" defer></script>
+</body>
+</html>
