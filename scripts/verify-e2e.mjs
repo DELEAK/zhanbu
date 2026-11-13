@@ -283,6 +283,55 @@ try {
       sigFilled.posRead === sigEmpty.posRead && sigFilled.prompt === sigEmpty.prompt &&
       sigFilled.h4.join('|') === sigEmpty.h4.join('|'),
     `空问题=${JSON.stringify(sigEmpty)}；填问题=${JSON.stringify(sigFilled)}`);
+
+  // ── E10：七个新术页面同款验收（首访 low → 起盘 → 简要 → 深度 → 双模式状态零丢失）──
+  const PAGES = [
+    { url: '/bazi.html', name: '八字', cast: 'bazi' },
+    { url: '/ziwei.html', name: '紫微', cast: 'ziwei' },
+    { url: '/qimen.html', name: '奇门', cast: 'qimen' },
+    { url: '/liuren.html', name: '六壬', cast: 'liuren' },
+    { url: '/meihua.html', name: '梅花', cast: 'meihua' },
+    { url: '/xiaoliuren.html', name: '小六壬', cast: 'xiaoliuren' },
+    { url: '/astrology.html', name: '占星', cast: 'astrology' },
+  ];
+  for (const pg of PAGES) {
+    await send('browsingContext.navigate', { context: ctx, url: `${BASE}${pg.url}` });
+    await waitFor(send, ctx, `typeof window.DS !== 'undefined' && !!document.getElementById('castBtn')`, `${pg.name}页载入`, 10000);
+    const perf = await evalIn(send, ctx, `document.documentElement.dataset.perf`);
+    await waitFor(send, ctx,
+      `(function(){var q=document.getElementById('question');if(q&&q.value!=='验收：此事走向如何')q.value='验收：此事走向如何';var b=document.getElementById('castBtn');if(b&&!document.querySelector('#result .pan'))b.click();return !!document.querySelector('#result .chart-brief')&&!!document.querySelector('#result .deep-panel');})()`,
+      `${pg.name}简要结果渲染`, 12000);
+
+    const deepEmptyBefore = await evalIn(send, ctx,
+      `var d=document.querySelector('#result .deep-panel'); d && !d.open && d.querySelector('.deep-body').innerHTML.trim()===''`);
+    await evalIn(send, ctx, `document.querySelector('#result .deep-panel summary').click(); true`);
+    await waitFor(send, ctx,
+      `var d=document.querySelector('#result .deep-panel'); d.open && d.getAttribute('data-loaded')==='1' && d.querySelector('.deep-body').innerHTML.length > 800`,
+      `${pg.name}深度注入`, 12000);
+    const deepLen = await evalIn(send, ctx, `document.querySelector('#result .deep-body').innerHTML.length`);
+    const buttons = await evalIn(send, ctx, `!!document.querySelector('#result .deep-body .btn-ai') && !!document.querySelector('#result .deep-body .btn-copy')`);
+    const promptBox = await evalIn(send, ctx, `!!document.querySelector('#result .deep-body .prompt-box')`);
+    const brief = await evalIn(send, ctx, `document.querySelector('#result .result-meta').innerText + '|' + document.querySelector('#result .chart-brief').innerText.slice(0,160)`);
+
+    await evalIn(send, ctx, `window.__noReloadMark = '${pg.cast}'; window.__resultNode = document.getElementById('result'); true`);
+    await evalIn(send, ctx, `document.querySelector('.perf-toggle').click(); true`);
+    await waitFor(send, ctx, `document.documentElement.dataset.perf === 'high'`, `${pg.name}切 high`);
+    await evalIn(send, ctx, `document.querySelector('.perf-toggle').click(); true`);
+    await waitFor(send, ctx, `document.documentElement.dataset.perf === 'low'`, `${pg.name}切回 low`);
+    const after = await evalIn(send, ctx, `JSON.stringify({
+      mark: window.__noReloadMark === '${pg.cast}',
+      sameNode: window.__resultNode === document.getElementById('result'),
+      briefSame: document.querySelector('#result .result-meta').innerText + '|' + document.querySelector('#result .chart-brief').innerText.slice(0,160) === ${JSON.stringify(brief)},
+      deepOpen: document.querySelector('#result .deep-panel').open,
+      deepLen: document.querySelector('#result .deep-body').innerHTML.length
+    })`);
+    const ja = JSON.parse(after);
+    ok(`E10 ${pg.name}页：首访 low → 简要 → deep-body 空 → 深度 >800 → 双模式切换零丢失`,
+      perf === 'low' && deepEmptyBefore === true && deepLen > 800 && buttons === true && promptBox === true &&
+        ja.mark && ja.sameNode && ja.briefSame && ja.deepOpen && ja.deepLen >= deepLen,
+      `perf=${perf}，空深度=${deepEmptyBefore}，深度 ${deepLen} 字，AI/复制=${buttons}，提示词=${promptBox}，标记=${ja.mark}，节点不变=${ja.sameNode}，简要不变=${ja.briefSame}，深度仍展开=${ja.deepOpen}(${ja.deepLen}≥${deepLen})`);
+  }
+
 } catch (e) {
   ok('E2E 执行', false, e.message);
 } finally {

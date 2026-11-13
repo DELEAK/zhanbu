@@ -246,3 +246,49 @@ VERIFY_BASE=http://127.0.0.1:3904 node scripts/verify-e2e.mjs
 1. Ollama 的模型列表随本机安装情况实时变化；若 Ollama 没起，下拉框只剩「自动」项（其余降级为服务端默认，不报错）。
 2. 页面选模型只作用于**当次请求**，不改服务端 `.env`；想固化就改 `.env` 的 `AI_PROVIDER` / `*_MODEL`。
 3. 本地 8B 在显存紧张时 Ollama 侧会偶发 `model runner has unexpectedly stopped`（实测 13s 内 500，重试即恢复）；服务端已把排查提示附在错误消息里（先 `ollama stop` 清显存 / 用 8B）。
+
+---
+
+## 6. 九术接入验收（T11，2026-11-13）
+
+本节记录计划 `docs/plan-nine-arts.md` §7 的 A1–A7 与新增页面行为测试 E10 的真实执行结果。旧 t6 的 A1–A8 结论保留在 §1–§5，不影响本节。
+
+- 验证对象：`divination-station/`（九术：塔罗、六爻、八字、紫微、奇门、六壬、梅花、小六壬、占星）
+- 运行环境：`PORT=3905 npm start`（Node v22.23.3，后台 job 常驻）；Firefox headless + BiDi
+- 新增脚本：`scripts/verify-arts.mjs`（七术后端验收 A1–A7）
+- 扩展脚本：`scripts/verify-static.mjs`（S1 覆盖 7 个新页面）、`scripts/verify-e2e.mjs`（新增 E10 七页行为）
+- 结论：**`verify-static` 全绿；`verify-arts` 全绿；`verify-e2e` 全绿（E1–E9 + E10×7）**
+
+### 6.1 A1–A7（verify-arts）
+
+| # | 验收 | 命令 | 输出摘要 | 结论 |
+|---|---|---|---|---|
+| A1 | `POST /api/chart` 七术均 200，`id` 以 `d_` 开头，`brief ≥ 60` 字，`kind` 正确 | `VERIFY_BASE=http://127.0.0.1:3905 node scripts/verify-arts.mjs` | bazi/ziwei/astrology `kind=mingpan`，qimen/liuren/meihua/xiaoliuren `kind=zhanwen`；brief 分别为 609/757/328/125/171/76/76 字 | passed |
+| A2 | 管理列表按 `artId` 过滤可查到记录且 `summary` 非空 | 同上 | 七术 summary 例：`四柱 庚午 壬午 辛亥 甲午 · 日主 辛金 · 身弱`、`命宫 武曲、天府 · 火六局`、`上升 处女 · 太阳 双子 · 月亮 双鱼`、`阴遁9局（立冬） · 值符 天心 值使 开门`、`辛卯日丁酉时 · 反吟课 · 初传 酉`、`本卦 山风蛊 → 变卦 巽为风 · 用克体，凶`、`落 小吉（吉 · 水）` | passed |
+| A3 | `GET /api/admin/records/:id` 的 `facts` 与 POST 返回 `brief` 逐字相同 | 同上 | 七术均 `facts === brief`（609/757/328/125/171/76/76 字） | passed |
+| A4 | `/api/prompt` 含「必须逐字引用下列排盘事实」+ persona 名 + brief 逐字；缺 `resultRaw` → 400 `NEED_RESULT` | 同上 | 七术 prompt 1242/1877/1124/1242/1137/853/966 字；persona 命中 7/7；七术缺 `resultRaw` 均 `400 NEED_RESULT` | passed |
+| A5 | qimen/liuren/xiaoliuren/bazi/ziwei 的 `duanyu` 非空 | 同上 | 271/235/175/253/232 字（梅花/占星允许为空，实测兜底文案亦非空） | passed |
+| A6 | 非法输入 → 400 | 同上 | `BAD_ART`、缺生日、2/31、hourIndex 12、梅花缺 n3、经度 999、非法 datetime、301 字问题（`BAD_QUESTION`）全部 400 且错误码正确 | passed |
+| A7 | bazi 时辰未知 → `hourGZ` 为「未知」或空且提示词含「时辰未知 · 最高约束」；ziwei `correctedHour=-1` 同约束 | 同上 | bazi `hourGZ="未知"`、prompt 含约束=true；ziwei `correctedHour=-1`、prompt 含约束=true | passed |
+
+### 6.2 E10（verify-e2e，七页行为）
+
+每页均断言：首访 `data-perf=low`；起盘后出简要盘面；`.deep-panel` 展开前 `.deep-body` 为空；展开后注入 >800 字且含 `.btn-ai`/`.btn-copy`/`.prompt-box`；切 high 再切 low：无刷新标记存活、`#result` 节点身份不变、简要文本不变、深度仍展开且内容不减少。
+
+| 页面 | 深度注入字符数 | 结论 |
+|---|---|---|
+| /bazi.html 八字 | 6791 | passed |
+| /ziwei.html 紫微 | 11115 | passed |
+| /qimen.html 奇门 | 4295 | passed |
+| /liuren.html 六壬 | 7234 | passed |
+| /meihua.html 梅花 | 5497（切换后 5695） | passed |
+| /xiaoliuren.html 小六壬 | 3545 | passed |
+| /astrology.html 占星 | 5189 | passed |
+
+- 命令：`VERIFY_BASE=http://127.0.0.1:3905 node scripts/verify-e2e.mjs`
+- 汇总输出：`行为测试全部通过`（E1–E9 + E10×7）
+
+### 6.3 静态检查
+
+- 命令：`node scripts/verify-static.mjs`
+- 结果：全绿。S1 覆盖 `index/tarot/liuyao/bazi/ziwei/qimen/liuren/meihua/xiaoliuren/astrology` 十份 HTML；S2 `public/` 全树禁项零命中；S3 扫描 284 条规则，生效效果声明全部位于 `html[data-perf="high"]` 前缀下。
