@@ -663,7 +663,9 @@ PYTHONPATH=scripts/.pylibs python3 scripts/encode_cards.py …
 
 ## 7. 上游（vendor/guanwei）问题与外层包装记录
 
-**本项目不修改 `vendor/guanwei/**`、`public/**`、`scripts/**`**，上游问题一律在 `server/` 外层包装：
+**上游边界**：`vendor/guanwei/**` 只读，任何上游问题一律在 `server/` 外层包装；`public/**` 与 `scripts/**` 是本项目自写资产（前端页面与验证脚本），随本站演进。
+
+上游问题与包装记录：
 
 1. **TS 类型剥离 + `.js` 导入**：vendor 是 TS 源码但 import 写 `…/tarotCards.js`、`./chartBrief`（无扩展名），Node 的 `--experimental-strip-types` 不做 `.js→.ts` 替换。
    → `server/ts-hooks.mjs`（ESM `resolve` 钩子，`module.register` 注册）在 `ERR_MODULE_NOT_FOUND / ERR_UNSUPPORTED_DIR_IMPORT / ERR_UNKNOWN_FILE_EXTENSION` 时按 `.ts/.mts/.cts` 与 `/index.ts` 重试。
