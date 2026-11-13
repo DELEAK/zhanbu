@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN" data-perf="low">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>梅花易数 · 观微卜影</title>
+<meta name="description" content="梅花易数起卦：本卦互卦变卦、体用生克与动爻，与服务端定稿的盘面事实。">
+<script>
+  (function () {
+    try {
+      var p = localStorage.getItem('divination.perf');
+      document.documentElement.dataset.perf = p === 'high' ? 'high' : 'low';
+    } catch (e) { document.documentElement.dataset.perf = 'low'; }
+  })();
+</script>
+<link rel="preload" href="/assets/styles.css" as="style">
+<link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="container topbar-inner">
+    <a class="brand" href="/">观微卜影</a>
+    <span class="brand-sep">/</span>
+    <span class="brand-page">梅花易数</span>
+    <div class="perf-toggle" id="perfToggle" role="switch" aria-checked="false" aria-label="切换性能模式" tabindex="0">
+      <span class="perf-dot" aria-hidden="true"></span>
+      <span class="perf-state">流畅</span>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+  <section class="section">
+    <h2 class="step">STEP 01 · 起卦方式</h2>
+    <div class="form-grid">
+      <div class="field-cell">
+        <label class="field-label" for="mode">起卦方式</label>
+        <select class="field" id="mode">
+          <option value="time" selected>时间起卦（此刻）</option>
+          <option value="number">报数起卦（三数）</option>
+        </select>
+      </div>
+    </div>
+    <div id="timeFields">
+      <p class="hint">以起卦时刻的年月日时取数成卦。可改为心中所念之事的时刻（本地时间）。</p>
+      <div id="momentForm"></div>
+    </div>
+    <div id="numFields" hidden>
+      <p class="hint">三个 1–999 的正整数。心中默念所问之事，随口报数。</p>
+      <div class="form-grid">
+        <div class="field-cell">
+          <label class="field-label" for="n1">第一数</label>
+          <input class="field" id="n1" type="number" min="1" max="999" value="7">
+        </div>
+        <div class="field-cell">
+          <label class="field-label" for="n2">第二数</label>
+          <input class="field" id="n2" type="number" min="1" max="999" value="13">
+        </div>
+        <div class="field-cell">
+          <label class="field-label" for="n3">第三数</label>
+          <input class="field" id="n3" type="number" min="1" max="999" value="5">
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2 class="step">STEP 02 · 心中的问题（可选）</h2>
+    <textarea class="field" id="question" rows="3" maxlength="300" placeholder="例如：这次合作能否谈成？"></textarea>
+    <div class="category-row">
+      <label class="field-label" for="category">分类</label>
+      <select class="field" id="category">
+        <option value="综合" selected>综合</option>
+        <option value="感情">感情</option>
+        <option value="事业">事业</option>
+        <option value="财运">财运</option>
+        <option value="学业">学业</option>
+        <option value="健康">健康</option>
+        <option value="人际">人际</option>
+      </select>
+    </div>
+    <p class="hint">问题用于断语取用与解读侧重，不改变起卦。</p>
+    <div class="form-actions">
+      <button class="btn" id="castBtn" type="button">起 卦</button>
+    </div>
+  </section>
+
+  <section id="result" hidden></section>
+</main>
+
+<footer class="footer">
+  <div class="container">
+    <p class="footer-note">盘面由服务端定稿，前端只做展示，不改算、不补算。</p>
+    <p class="footer-meta">观微卜影 · 自托管 · <a href="/">返回首页</a></p>
+  </div>
+</footer>
+
+<div id="toast" class="toast" hidden></div>
+<script src="/assets/app.js" defer></script>
+<script src="/assets/meihua.js" defer></script>
+</body>
+</html>
