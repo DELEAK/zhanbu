@@ -13,7 +13,8 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));   // .../divination-s
 const ROOT = path.resolve(HERE, '..');                       // .../divination-station
 
 // 可选 .env（项目根）：KEY=VALUE 逐行解析，只补缺、不覆盖已存在的环境变量（shell/进程环境优先）
-// 用途：放 MIMO_API_KEY 等机密，避免写进 shell 历史或代码仓库（.env 已在 .gitignore）
+// 用途：放 MIMO_API_KEY / MINIMAX_API_KEY 等机密，避免写进 shell 历史或代码仓库（.env 已在 .gitignore）
+// 语法：KEY=VALUE；# 开头整行是注释；行内注释需用空白隔开（KEY=value   # 注释）；含特殊字符的值用引号包裹
 const envFile = path.join(ROOT, '.env');
 if (fs.existsSync(envFile)) {
   for (const line of fs.readFileSync(envFile, 'utf8').split(/\r?\n/)) {
@@ -22,8 +23,11 @@ if (fs.existsSync(envFile)) {
     const m = /^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(trimmed);
     if (!m) continue;
     let v = m[2];
-    if ((v.startsWith('"') && v.endsWith('"') && v.length >= 2) || (v.startsWith("'") && v.endsWith("'") && v.length >= 2)) {
-      v = v.slice(1, -1);
+    const quoted = v.match(/^(['"])([\s\S]*?)\1\s*(?:#.*)?$/);   // 引号值：取引号内原文（可带行尾注释）
+    if (quoted) {
+      v = quoted[2];
+    } else {
+      v = v.replace(/\s+#.*$/, '').trim();                        // 裸值：按“空白 + #”截断行内注释
     }
     if (!(m[1] in process.env)) process.env[m[1]] = v;
   }

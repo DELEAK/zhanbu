@@ -1,7 +1,7 @@
 # divination-station · 个人占卜小站
 
 塔罗 + 周易六爻的自托管占卜站点：**观微 guanwei 后端（vendored，只读）当计算引擎，自写极简 Express 服务与原生前端**。
-抽牌、正逆位、起卦、纳甲装卦、断语引证全部在服务端定稿，前端零计算、零历法库；AI 解读默认 = 生成一段提示词供复制，**不内嵌 LLM**；配置 `MIMO_API_KEY` 后可一键由服务端调用 MiMo 生成解读全文（见 [4.7](#47-post-apiai-interpretai-深度解读--mimo)）。
+抽牌、正逆位、起卦、纳甲装卦、断语引证全部在服务端定稿，前端零计算、零历法库；AI 解读默认 = 生成一段提示词供复制，**不内嵌 LLM**；配置任一厂商的 API Key（MiMo / MiniMax / DeepSeek / 任意 OpenAI 兼容）后可一键由服务端生成解读全文（见 [4.7](#47-post-apiai-interpretai-深度解读--多厂商-llm)）。
 
 ```text
 divination-station/
@@ -12,10 +12,13 @@ divination-station/
 │   ├── paths.ts                # ROOT / PUBLIC_DIR / DATA_DIR
 │   ├── routes/tarotCards.ts    # GET /api/tarot/cards（补 slug + 三档图片字段）
 │   ├── routes/liuyao.ts        # POST /api/liuyao
+│   ├── routes/chart.ts         # POST /api/chart（七术统一起盘）+ GET /api/chart/arts（能力清单）
+│   ├── services/chartInputs.ts # 七术输入归一化（公历→农历/干支换算 + 字段校验）
 │   ├── routes/prompt.ts        # GET|POST /api/prompt
-│   ├── routes/aiInterpret.ts   # POST /api/ai-interpret（服务端调用 MiMo 生成 AI 深度解读）
+│   ├── routes/aiInterpret.ts   # POST /api/ai-interpret（服务端调用 LLM 生成 AI 深度解读）
+│   ├── routes/aiModels.ts      # GET /api/ai-models（页面上手选厂商/模型的清单）
 │   ├── services/yongshen.ts    # 自写六爻用神候选推导
-│   └── services/mimo.ts        # MiMo（小米）OpenAI 兼容客户端；API Key 只留在服务端
+│   └── services/llm.ts         # 多厂商 LLM 客户端（MiMo/MiniMax/DeepSeek/任意 OpenAI 兼容）；Key 只留服务端
 ├── vendor/guanwei/             # 观微后端（上游，禁止修改：只读挂载）
 ├── shared/…（见 vendor 内）      # 排盘引擎 / 牌库 / 断语库
 ├── public/                     # 前端静态站：index.html、tarot.html、liuyao.html、/img/cards
@@ -75,11 +78,21 @@ curl -s http://127.0.0.1:3901/api/health
 | `PORT` | `3901` | HTTP 端口（bootstrap 同样 `||=` 注入）。 |
 | `HOST` | `0.0.0.0` | **默认绑所有网卡（局域网部署）**，局域网内其他设备用 `http://<本机IP>:3901/` 直接访问。只在本机使用时可设 `HOST=127.0.0.1` 收紧。 |
 | `GUANWEI_ALLOWED_ORIGINS` | （空） | 逗号分隔的跨域来源白名单。为空时**只放行同源/本机源**（`http://localhost:*`、`http://127.0.0.1:*`）。 |
+| `AI_PROVIDER` | 自动探测 | **选哪家 LLM**：`mimo` / `minimax` / `deepseek` / `compat`。不设时按 Key 前缀自动认（`sk-cp-` → MiniMax），否则取第一个配了 Key 的厂商。 |
+| `AI_API_KEY` / `AI_BASE_URL` / `AI_MODEL` | （未配置） | **通用覆盖**：对当前生效的厂商一律适用，优先级低于厂商专属变量。 |
+| `AI_TIMEOUT_MS` / `AI_MAX_TOKENS` | `120000` / `2048` | 单次调用超时 / 输出 token 上限。 |
 | `MIMO_API_KEY` | （未配置） | **MiMo（小米）API Key**（`sk-` 按量付费 / `tp-`·`ttp-` Token Plan）。配置后深度面板出现「AI 深度解读」按钮，由服务端调用 MiMo 生成解读全文；未配置时按钮返回 503 并提示走「复制提示词」。**只放服务端，永不下发浏览器**。 |
 | `MIMO_BASE_URL` | 按 Key 前缀自动 | `sk-`→`https://api.xiaomimimo.com/v1`，`tp-`/`ttp-`→`https://token-plan-cn.xiaomimimo.com/v1`；也可显式覆盖。 |
 | `MIMO_MODEL` | `mimo-v2.6-pro` | 模型名；省钱可用 `mimo-v2.6-flash`。 |
-| `MIMO_TIMEOUT_MS` | `120000` | 单次调用超时。 |
-| `MIMO_MAX_TOKENS` | `2048` | `max_completion_tokens` 上限。 |
+| `MIMO_TIMEOUT_MS` / `MIMO_MAX_TOKENS` | `120000` / `2048` | 单次调用超时 / `max_completion_tokens` 上限。 |
+| `MINIMAX_API_KEY` | （未配置） | **MiniMax API Key**（`sk-cp-` Coding Plan / `sk-` 按量）。配合 `AI_PROVIDER=minimax`。 |
+| `MINIMAX_BASE_URL` | `https://api.minimaxi.com/v1` | MiniMax 端点；海外站改 `https://api.minimax.io/v1`。 |
+| `MINIMAX_MODEL` | `MiniMax-M3` | 模型名；也可 `MiniMax-M2.7` / `MiniMax-M3.1-Flash-Preview`。 |
+| `MINIMAX_THINKING` | `disabled` | MiniMax 思考开关（`disabled`/`enabled`）。占卜解读不需要长推理，默认关掉更快更省。 |
+| `DEEPSEEK_API_KEY` | （未配置） | **DeepSeek API Key**。配合 `AI_PROVIDER=deepseek`。 |
+| `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` | `https://api.deepseek.com/v1` / `deepseek-chat` | DeepSeek 端点 / 模型。 |
+| `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` | （未配置） | **任意 OpenAI 兼容厂商**（配合 `AI_PROVIDER=compat`）：不用改代码就能接新厂商。 |
+| `AI_EXTRA_PARAMS` / `LLM_EXTRA_PARAMS` | （未配置） | 追加到请求体的厂商专属参数（JSON）。例：`{"thinking":{"type":"disabled"}}`。 |
 | `DIVINATION_AUTH` | （空=不认证） | 对外分享用的 **HTTP Basic 认证口令**，格式 `用户名:密码`。设置后整站（页面 + API）都需要口令，浏览器会弹登录框。默认关，局域网自用不必设。 |
 | `DIVINATION_RATE_LIMIT` | `120` | `/api/*` **每 IP 每分钟**请求上限（内存滑动窗口，`0`=关闭）。分享出去时防扫描器打满。 |
 | `DIVINATION_AI_LIMIT` | `6` | `/api/ai-interpret` 每 IP 每分钟上限（默认更严格，防 AI 额度被烧）。 |
@@ -90,19 +103,25 @@ curl -s http://127.0.0.1:3901/api/health
 PORT=8080 HOST=127.0.0.1 GUANWEI_ALLOWED_ORIGINS=https://div.example.com npm start
 ```
 
-机密（如 `MIMO_API_KEY`）推荐写进**项目根 `.env`**（已在 `.gitignore`，`KEY=VALUE` 逐行，`#` 注释）：`server/bootstrap.mjs` 启动时自动读取，只补缺、不覆盖 shell 里已有的环境变量：
+机密（如 `MIMO_API_KEY` / `MINIMAX_API_KEY`）推荐写进**项目根 `.env`**（已在 `.gitignore`，`KEY=VALUE` 逐行，`#` 注释；行内注释需用空白隔开，如 `KEY=value   # 说明`）：`server/bootstrap.mjs` 启动时自动读取，只补缺、不覆盖 shell 里已有的环境变量：
 
 ```bash
 # divination-station/.env
+AI_PROVIDER=mimo
 MIMO_API_KEY=tp-xxxxxxxx
 # MIMO_MODEL=mimo-v2.6-flash
+
+# 换成 MiniMax Coding Plan：改 AI_PROVIDER 即可（Key 前缀 sk-cp- 也会被自动认出）
+# AI_PROVIDER=minimax
+# MINIMAX_API_KEY=sk-cp-xxxxxxxx
+# MINIMAX_MODEL=MiniMax-M3.1-Flash-Preview
 ```
 
 > 环境变量的完整诊断口径见 [`docs/env.md`](docs/env.md)；本服务不依赖 shell 里预设 `GUANWEI_DATA_DIR`。
 
 ### 对外临时分享（无域名 / 无账号）
 
-把站点临时给朋友玩，只需要「一个 https 链接 + 一个口令」，不需要域名、不需要注册。要点：**先加口令**，再开隧道——否则随机扫描器会打满接口，`/api/ai-interpret` 还会烧掉 MiMo 额度。
+把站点临时给朋友玩，只需要「一个 https 链接 + 一个口令」，不需要域名、不需要注册。要点：**先加口令**，再开隧道——否则随机扫描器会打满接口，`/api/ai-interpret` 还会烧掉 AI 额度。
 
 ```bash
 # 1) 起一个带口令、带限流的实例（端口自选，避免和自用实例冲突）
@@ -146,7 +165,7 @@ ssh -p 443 -R 0:127.0.0.1:3903 a.pinggy.io
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/health` | 健康检查：`dataDir` / `dataDirOk` / `hooks` |
+| GET | `/api/health` | 健康检查：`dataDir` / `dataDirOk` / `hooks` / `ai`（当前 AI 厂商与模型，不含 Key） |
 | GET | `/api` | 端点清单 |
 | GET | `/api/tarot/cards` | 78 张牌（**含 slug + 三档图片字段**） |
 | GET | `/api/tarot/spreads` | 17 个内置牌阵 |
@@ -154,11 +173,14 @@ ssh -p 443 -R 0:127.0.0.1:3903 a.pinggy.io
 | POST | `/api/tarot/session` | 服务端抽牌 **+ 记录入库**（`{spreadId,question?,category?}`，返回 `{id,cards,spread}`；页面实际走这个） |
 | POST | `/api/tarot/interpret` | 服务端生成解读（`{cards,spread,question,category?,id?}`，question ≤300 字；带 `id` 时把解读全文补挂到记录） |
 | POST | `/api/liuyao` | 服务端按当前时间 + 随机起卦，**并写入 `data/guanwei.db`（含来源 IP/UA）** |
+| GET | `/api/chart/arts` | 七术能力清单：`label` / `kind`（mingpan\|zhanwen）/ `group` / `needs` / `schema` |
+| POST | `/api/chart` | **七术统一起盘**（`bazi`/`ziwei`/`astrology`/`qimen`/`liuren`/`meihua`/`xiaoliuren`）：校验并归一化输入 → 服务端排盘 → 落库 → 返回 `{id,brief,duanyu,resultRaw}` |
 | GET/POST | `/api/prompt` | 生成可直接粘贴给 LLM 的中文提示词（盘面事实 + 古籍引证 + 用神候选） |
-| POST | `/api/ai-interpret` | **AI 深度解读**：用与 `/api/prompt` 相同的提示词调用 MiMo 生成解读全文（需 `MIMO_API_KEY`；未配置返回 503） |
+| POST | `/api/ai-interpret` | **AI 深度解读**：用与 `/api/prompt` 相同的提示词调用 LLM 生成解读全文（需配置任一厂商的 Key；未配置返回 503；可带 `provider`/`model` 临时换模型） |
+| GET | `/api/ai-models` | 可选模型清单（各厂商 + 该厂商的模型；Ollama 为本地实时 `/models`），供页面上手选 |
 | GET | `/api/admin/records` | 记录列表（`?limit&offset&artId=all\|tarot\|liuyao`），需 `x-admin-token` 或 `?token=` |
 | GET | `/api/admin/records/:id` | 单条完整记录（盘面 / 盘面事实 / 古籍引证 / AI 解读 / 来源） |
-| POST | `/api/admin/records/:id/interpret` | 用存档盘面补生成 AI 解读并写回该记录（需 `MIMO_API_KEY`） |
+| POST | `/api/admin/records/:id/interpret` | 用存档盘面补生成 AI 解读并写回该记录（需配置任一厂商的 Key） |
 | GET | `/api/admin/export.csv` | 导出 CSV（UTF-8 BOM，Excel 直接打开） |
 
 统一错误格式：`{"error":"<CODE>","message":"<中文说明>"}`（`BAD_SPREAD` / `BAD_CARDS` / `BAD_QUESTION` / `BAD_ART` / `BAD_JSON` / `NOT_FOUND`…）；参数上限：牌数 1–20、问题 ≤300 字。
@@ -473,10 +495,55 @@ curl -s -X POST -H 'Content-Type: application/json' \
 
 每个候选都给出**爻位（初/二/…/上）+ 纳甲干支 + 六亲 + 六神 + 世/应/动/旬空**；用神不上卦时提示「须寻伏神，勿自行补造」，不自行编造爻。
 
-### 4.7 `POST /api/ai-interpret`（AI 深度解读 · MiMo）
+### 4.7 `POST /api/ai-interpret`（AI 深度解读 · 多厂商 LLM）
 
-配置 `MIMO_API_KEY` 后，把 `/api/prompt` 的提示词交给 MiMo（小米，OpenAI 兼容协议）生成解读全文。
+配置任一厂商的 API Key 后，把 `/api/prompt` 的提示词交给 LLM（OpenAI 兼容协议）生成解读全文。
 **入参与 `POST /api/prompt` 完全一致**，提示词由同一构建函数生成——AI 深度解读与「复制提示词」使用同一份盘面事实与硬约束（【必须逐字引用下列排盘事实，不得推算或改写】）。
+
+**厂商可切换**（只改配置，不改代码）：
+
+| `AI_PROVIDER` | 厂商 | Key 变量 | 默认端点 | 默认模型 |
+|---|---|---|---|---|
+| `mimo` | MiMo（小米） | `MIMO_API_KEY` | 按 Key 前缀自动（`sk-`→按量付费 / `tp-`·`ttp-`→Token Plan） | `mimo-v2.6-pro` |
+| `minimax` | MiniMax | `MINIMAX_API_KEY` | `https://api.minimaxi.com/v1`（海外 `api.minimax.io`） | `MiniMax-M3` |
+| `deepseek` | DeepSeek | `DEEPSEEK_API_KEY` | `https://api.deepseek.com/v1` | `deepseek-chat` |
+| `compat` | 任意 OpenAI 兼容 | `LLM_API_KEY` | 必填 `LLM_BASE_URL` | 必填 `LLM_MODEL` |
+| `ollama` | **本地 Ollama**（8B 小模型） | 不用 Key | `http://127.0.0.1:11434/v1` | `deepseek-r1:8b` |
+
+选择规则：`AI_PROVIDER` 显式指定 → Key 前缀嗅探（`sk-cp-` → MiniMax Coding Plan）→ 按上表顺序取第一个配了 Key 的厂商。
+每家还可用 `<前缀>_BASE_URL` / `<前缀>_MODEL` / `<前缀>_TIMEOUT_MS` / `<前缀>_MAX_TOKENS` / `<前缀>_THINKING` / `<前缀>_TEMPERATURE` / `<前缀>_EXTRA_PARAMS` 覆盖；`AI_BASE_URL` / `AI_MODEL` / `AI_TEMPERATURE` / `AI_EXTRA_PARAMS` 等通用变量对当前生效的厂商一律适用（优先级低于厂商专属项）。
+新增厂商：往 `server/services/llm.ts` 的 `PROVIDERS` 加一条，或直接用 `compat` 接任意 OpenAI 兼容服务。
+
+### 页面上手选模型
+
+深度面板（塔罗 / 六爻）与管理页补解读处都有一个「模型」下拉框，选项来自 `GET /api/ai-models`：
+
+- 只列**已配置 Key 的厂商**（没配的不出现，避免选了必然报错）；Ollama 那一组是本机**实时** `/models` 拉出来的已装模型。
+- 默认项是「自动（当前：<厂商> <模型>）」= 沿用服务端 `.env` 的配置；选了具体模型则该次请求临时用所选模型（只影响这一条，不改全局配置）。
+- **浏览器只能选「厂商 + 模型名」**，base URL 与 API Key 始终只在服务端 —— 换模型不会把 Key 泄露到前端。
+- 请求体里带 `provider` / `model` 即可复现：`POST /api/ai-interpret {"artId":"liuyao","provider":"minimax","model":"MiniMax-M2.7"}`。
+- 模型名会做白名单校验（只允许 `A-Za-z0-9._:-/`），非法名返回 400 `AI_BAD_MODEL`；选到没配 Key 的厂商返回 503 `AI_NOT_CONFIGURED`（附「检测到 XX_API_KEY 已配置」的提示）。
+
+### 本地小模型（Ollama 8B）
+
+`AI_PROVIDER=ollama` 即可用本机 Ollama 的 OpenAI 兼容端点跑解读：不花钱、不出网、无需 Key（本机端点自动免鉴权）。
+
+```bash
+# .env
+AI_PROVIDER=ollama
+OLLAMA_MODEL=deepseek-r1:8b
+OLLAMA_BASE_URL=http://127.0.0.1:11434/v1
+OLLAMA_MAX_TOKENS=2048        # Ollama 默认上下文 4096，提示词已占 ~1K
+OLLAMA_TIMEOUT_MS=300000      # 本地出字慢，超时给宽
+OLLAMA_TEMPERATURE=0.4        # 小模型温度调低，少编事实
+```
+
+注意事项：
+
+1. **别用 14B**：`qwen-coder-14b` / `ds-r1-14b` 各占 12GB，本机显存装不下，加载即 OOM（表现为接口 500 / 机器卡死）。8B（`deepseek-r1:8b`，6GB）可正常驻留显存。
+2. **上下文 4096**：提示词约 1K token，输出上限建议 ≤2048，否则生成到尾部会撞上下文；要更长就 `OLLAMA_CONTEXT_LENGTH=8192 ollama serve` 重启服务。
+3. **速度**：8B 在本机约 10 token/s，一次解读 1–2 分钟（前端提示的「约 10-30 秒」要按本地模型放宽预期）；`OLLAMA_TIMEOUT_MS` 默认 300s。
+4. **质量**：8B 的解读比 MiniMax-M3 短（实测 1179 字 vs 1563 字），「逐字引用排盘事实」偶尔会漂；温度已默认降到 0.4 以减少编造，严肃场景仍建议用云端大模型。
 
 ```bash
 curl -s http://127.0.0.1:3901/api/ai-interpret \
@@ -484,11 +551,11 @@ curl -s http://127.0.0.1:3901/api/ai-interpret \
   -d '{"artId":"liuyao","question":"我今年下半年的财运如何","category":"财运"}'
 ```
 
-成功响应：`{"ok":true,"artId":"liuyao","model":"mimo-v2.6-pro","text":"<解读全文>","usage":{...},"cached":false}`。
+成功响应：`{"ok":true,"artId":"liuyao","model":"mimo-v2.6-pro","provider":"mimo","text":"<解读全文>","usage":{...},"cached":false}`。
 同盘同问的重复请求命中服务端缓存（`cached:true`，FIFO 上限 32 条，避免重复计费）。
-错误沿用统一格式：`MIMO_NOT_CONFIGURED`（503，未配置 Key）、`MIMO_AUTH_ERROR`（Key 无效）、`MIMO_RATE_LIMITED`（429）、`MIMO_TIMEOUT`（504）、`MIMO_UPSTREAM_ERROR`/`MIMO_EMPTY`（502）。
-前端（塔罗/六爻深度面板的「AI 深度解读（MiMo）」按钮）在未配置或失败时自动回退为「复制提示词」，功能不缺失。
-模型输出为纯文本。页面点「AI 深度解读」时会带上当前记录 `id`，服务端把全文存进该记录的 `report_json`（塔罗、六爻都存），响应里 `saved:true` 表示已落库——日后在 `/admin.html` 能回看「问了什么 + AI 说了什么」。
+错误沿用统一格式：`AI_NOT_CONFIGURED`（503，未配置 Key）、`AI_AUTH_ERROR`（Key 无效）、`AI_RATE_LIMITED`（429）、`AI_TIMEOUT`（504）、`AI_UPSTREAM_ERROR`/`AI_EMPTY`（502）。
+前端（塔罗/六爻深度面板的「AI 深度解读」按钮）在未配置或失败时自动回退为「复制提示词」，功能不缺失。
+模型输出为纯文本（服务端会剥掉推理模型塞进正文的 `<think>` 段）。页面点「AI 深度解读」时会带上当前记录 `id`，服务端把全文存进该记录的 `report_json`（塔罗、六爻都存），响应里 `saved:true` 表示已落库——日后在 `/admin.html` 能回看「问了什么 + AI 说了什么」。
 
 ### 4.8 起占记录与查看（`/admin.html`，可选）
 
@@ -497,7 +564,7 @@ curl -s http://127.0.0.1:3901/api/ai-interpret \
 - 六爻：`POST /api/liuyao` 直接落库。
 - 塔罗：页面改为调 `POST /api/tarot/session`（抽牌即建记录），展开深度时 `POST /api/tarot/interpret` 带 `id` 把解读补挂到同一条记录。
 
-**AI 解读**：页面生成的解读会自动存（见 §4.7）。老记录如果当时没存（六爻早期的 AI 输出、塔罗没展开深度就关掉的），详情页会显示**盘面事实**（由存档盘面实时算出，含卦象/纳甲/六亲六神/月破旬空）与**古籍引证**，并给一个「生成 AI 解读并保存」按钮：用存档盘面重算提示词、调 MiMo、结果写回该记录（会消耗额度，约 10–60 秒）。
+**AI 解读**：页面生成的解读会自动存（见 §4.7）。老记录如果当时没存（六爻早期的 AI 输出、塔罗没展开深度就关掉的），详情页会显示**盘面事实**（由存档盘面实时算出，含卦象/纳甲/六亲六神/月破旬空）与**古籍引证**，并给一个「生成 AI 解读并保存」按钮：用存档盘面重算提示词、调当前配置的 LLM 厂商、结果写回该记录（会消耗额度，约 10–60 秒）。
 
 **怎么看**：设 `DIVINATION_ADMIN_TOKEN=<随机口令>` 后重启，打开 `/admin.html`：
 

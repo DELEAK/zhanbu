@@ -398,11 +398,12 @@
 
     var promptText = (promptRes && promptRes.prompt) || '提示词生成失败，请收起后重新展开重试。';
     html += '<div class="deep-sec"><h4>AI 解读提示词</h4>' +
-      '<p class="hint">点击「AI 深度解读」由服务端调用 MiMo 生成解读全文（未配置 API Key 时会提示）；也可复制下面的提示词（含问题、分类与本次牌面事实），粘贴到任意 AI 工具。</p>' +
+      '<p class="hint">点击「AI 深度解读」由服务端调用 AI 模型生成解读全文（未配置 API Key 时会提示）；也可复制下面的提示词（含问题、分类与本次牌面事实），粘贴到任意 AI 工具。</p>' +
+      '<div class="ai-model-picker"></div>' +
       '<div class="prompt-block">' +
         '<textarea class="prompt-box" readonly rows="9">' + DS.esc(promptText) + '</textarea>' +
         '<div class="prompt-actions">' +
-          '<button class="btn btn-ai" type="button">AI 深度解读（MiMo）</button>' +
+          '<button class="btn btn-ai" type="button">AI 深度解读</button>' +
           '<button class="btn btn-copy" type="button">复制 AI 解读提示词</button>' +
         '</div>' +
       '</div>' +

@@ -164,11 +164,12 @@
     // AI 解读：有就显示，没有就现场补生成（写入该记录的 report_json）
     head += '<h3 class="sec-title">AI 解读</h3>';
     if (report && report.fullText) {
-      head += '<p class="admin-meta">模型：' + esc(report.model || 'MiMo') +
+      head += '<p class="admin-meta">模型：' + esc(report.model || 'AI 模型') +
         (report.source === 'admin-backfill' ? '（记录补生成）' : '') + '</p><pre>' + esc(String(report.fullText).replace(/\*\*/g, '')) + '</pre>';
     } else {
       head += '<p class="admin-meta">这条记录当时没有存下 AI 解读全文（六爻的 AI 输出原本就不落库）。' +
-        '可点下面的按钮，用存档盘面补生成一份并保存到该记录（会消耗 MiMo 额度，约 10-30 秒）。</p>' +
+        '可点下面的按钮，用存档盘面补生成一份并保存到该记录（会消耗 AI 额度，约 10-30 秒）。</p>' +
+        '<div class="ai-model-picker" id="genAiModels"></div>' +
         '<div class="admin-actions"><button class="btn btn-ai" id="genAi" type="button">生成 AI 解读并保存</button></div>' +
         '<div class="ai-out" id="genOut" hidden></div>';
     }
@@ -180,16 +181,18 @@
 
     var gen = $('#genAi');
     if (gen) {
+      var pickFn = window.DS && DS.wireModelPicker ? DS.wireModelPicker($('#detail')) : null;
       gen.addEventListener('click', function () {
         gen.disabled = true;
         gen.textContent = '生成中…';
         var out = $('#genOut');
         out.hidden = false;
-        out.innerHTML = '<p class="hint">正在调用 MiMo 生成解读…</p>';
+        out.innerHTML = '<p class="hint">正在调用 AI 模型生成解读…</p>';
+        var pick = pickFn ? pickFn() : {};
         fetch('/api/admin/records/' + encodeURIComponent(rec.id) + '/interpret', {
           method: 'POST',
           headers: { 'x-admin-token': state.token, 'content-type': 'application/json' },
-          body: '{}'
+          body: JSON.stringify(pick)
         }).then(function (r) {
           return r.json().catch(function () { return {}; }).then(function (b) {
             if (!r.ok) { var e = new Error(b.message || ('HTTP ' + r.status)); e.code = b.error; throw e; }
@@ -199,7 +202,7 @@
           // 模型偶尔带 ** 强调标记，纯文本展示去掉它（保留内容，不引入 Markdown 渲染）
           var plain = String(b.text || '').replace(/\*\*/g, '');
           out.innerHTML = '<div class="ai-text">' + esc(plain).replace(/\n{2,}/g, '</p><p>').replace(/\n/g, '<br>') + '</div>' +
-            '<p class="hint">已保存到该记录（模型 ' + esc(b.model || 'MiMo') + '）。</p>';
+            '<p class="hint">已保存到该记录（模型 ' + esc(b.model || 'AI 模型') + '）。</p>';
           setMeta('解读已保存。');
           loadList();
         }).catch(function (e) {

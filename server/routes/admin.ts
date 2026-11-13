@@ -11,7 +11,7 @@ import { duanyuPromptBlock } from '../../vendor/guanwei/server/src/services/duan
 import { attachReport, getDivination } from '../../vendor/guanwei/server/src/services/divineStore.ts';
 import { buildPromptResponse } from './prompt.ts';
 import { systemPrompt } from './aiInterpret.ts';
-import { chatComplete, mimoInfo } from '../services/mimo.ts';
+import { chatComplete, llmInfo } from '../services/llm.ts';
 import { deriveYongshen } from '../services/yongshen.ts';
 
 const router = Router();
@@ -94,18 +94,21 @@ router.get('/records/:id', (req, res) => {
   res.json(rec);
 });
 
-// 给存档记录补生成 AI 解读并落库（老记录当时没有存解读全文时用；会真实消耗 MiMo 额度）
+// 给存档记录补生成 AI 解读并落库（老记录当时没有存解读全文时用；会真实消耗 AI 额度）
 router.post('/records/:id/interpret', async (req, res) => {
   try {
     const rec = getRecord(req.params.id);
     if (!rec) return res.status(404).json({ error: 'NOT_FOUND', message: '记录不存在' });
     if (!rec.resultRaw) return res.status(400).json({ error: 'NO_RESULT', message: '该记录没有存档盘面，无法生成解读' });
 
-    const info = mimoInfo();
+    const info = llmInfo();
+    if (info.error) {
+      return res.status(500).json({ error: info.error.code, message: info.error.message });
+    }
     if (!info.configured) {
       return res.status(503).json({
-        error: 'MIMO_NOT_CONFIGURED',
-        message: '服务端未配置 MIMO_API_KEY，无法生成 AI 解读；可在站点深度面板复制提示词到任意 AI 工具。',
+        error: 'AI_NOT_CONFIGURED',
+        message: `服务端未配置 AI 厂商的 API Key（${info.providerLabel}：${info.keyEnv}）${info.hint || ''}；无法生成 AI 解读，可在站点深度面板复制提示词到任意 AI 工具。`,
       });
     }
 
@@ -118,7 +121,12 @@ router.post('/records/:id/interpret', async (req, res) => {
     const built = buildPromptResponse(src);
     if (built.status !== 200) return res.status(built.status).json(built.body);
 
-    const result = await chatComplete({ system: systemPrompt(), user: built.body.prompt });
+    const result = await chatComplete({
+      system: systemPrompt(info.providerLabel),
+      user: built.body.prompt,
+      provider: typeof req.body?.provider === 'string' ? req.body.provider : undefined,
+      model: typeof req.body?.model === 'string' ? req.body.model : undefined,
+    });
     attachReport(String(rec.id), {
       artId: rec.artId,
       question: rec.question || null,
@@ -129,11 +137,11 @@ router.post('/records/:id/interpret', async (req, res) => {
       createdAt: Date.now(),
     }, 'ok');
 
-    res.json({ ok: true, id: rec.id, model: result.model, usage: result.usage || null, cached: result.cached, text: result.text });
+    res.json({ ok: true, id: rec.id, model: result.model, provider: result.provider, usage: result.usage || null, cached: result.cached, text: result.text });
   } catch (e: any) {
     const status = Number(e?.status) || 502;
     if (status >= 500) console.error('[admin/interpret] 调用失败:', e?.message || e);
-    res.status(status).json({ error: e?.code || 'MIMO_ERROR', message: e?.message || 'AI 解读生成失败，请稍后再试' });
+    res.status(status).json({ error: e?.code || 'AI_ERROR', message: e?.message || 'AI 解读生成失败，请稍后再试' });
   }
 });
 

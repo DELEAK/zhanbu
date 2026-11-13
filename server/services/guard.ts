@@ -4,7 +4,7 @@
 //   DIVINATION_RATE_LIMIT=120      /api/* 每 IP 每分钟请求上限（默认 120，0=关闭）
 //   DIVINATION_AI_LIMIT=6          /api/ai-interpret 每 IP 每分钟上限（默认 6，0=关闭）
 //
-// 目的：把站点临时分享给朋友时，避免被随机扫描器打满，也避免 /api/ai-interpret 烧掉 MiMo 额度。
+// 目的：把站点临时分享给朋友时，避免被随机扫描器打满，也避免 /api/ai-interpret 烧掉 AI 额度。
 import crypto from 'node:crypto';
 
 /* ---------------- 客户端 IP（兼容 cloudflared / 反代） ---------------- */

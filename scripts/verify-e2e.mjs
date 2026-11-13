@@ -16,6 +16,7 @@
 //   E9  （F3）六爻深度收起态切换问题分类 → data-loaded 失效，重展开按新分类刷新（用神图例含新分类）
 //
 // 运行前提：整站已在 http://127.0.0.1:3901 运行（npm start）；本机有 firefox。
+// 端口优先级：VERIFY_BASE > 环境变量 PORT > 项目根 .env 里的 PORT > 3901
 // 输出：逐项 PASS/FAIL；任一 FAIL → exit 1。
 
 import { spawn } from 'node:child_process';
@@ -23,7 +24,20 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const BASE = process.env.VERIFY_BASE || 'http://127.0.0.1:3901';
+// 端口：环境变量 PORT > 项目根 .env 的 PORT > 3901（.env 里 PORT=3904 就跟着 3904 跑）
+function readPort() {
+  if (process.env.PORT) return process.env.PORT;
+  try {
+    const envFile = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '.env');
+    const line = fs.readFileSync(envFile, 'utf8').split(/\r?\n/)
+      .map((l) => l.trim())
+      .find((l) => /^PORT\s*=/.test(l));
+    if (line) return line.split('=')[1].trim().split(/\s+#/)[0];
+  } catch { /* 没有 .env 就用默认 */ }
+  return '3901';
+}
+
+const BASE = process.env.VERIFY_BASE || `http://127.0.0.1:${readPort()}`;
 const DEBUG_PORT = 4444;
 
 let failures = 0;

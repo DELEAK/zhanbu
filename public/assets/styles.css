@@ -884,6 +884,37 @@ select.field {
   margin-bottom: 0;
 }
 
+/* 模型手选（厂商 + 模型）：只在深度面板/管理页里出现，纯静态样式 */
+.ai-model-picker {
+  margin: 10px 0 2px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ai-model-label {
+  font: 400 13px/1.6 var(--font-body);
+  color: var(--fg-dim);
+}
+
+.ai-model-select {
+  flex: 1 1 220px;
+  min-width: 180px;
+  max-width: 100%;
+  padding: 7px 10px;
+  background: var(--bg-3);
+  border: 1px solid var(--gold-line);
+  border-radius: var(--r-sm);
+  color: var(--fg);
+  font: 400 13px/1.5 var(--font-body);
+}
+
+.ai-model-select:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
 /* ---------- 13. Toast ---------- */
 #toast {
   position: fixed;

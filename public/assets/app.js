@@ -315,7 +315,57 @@
     });
   }
 
-  /* ---------------- AI 深度解读（服务端调用 MiMo；API Key 不进浏览器） ---------------- */
+  /* ---------------- AI 模型手选（厂商 + 模型） ---------------- */
+
+  var aiModelsCache = null;
+
+  function loadAiModels() {
+    if (aiModelsCache) return aiModelsCache;
+    aiModelsCache = get('/api/ai-models').catch(function (e) {
+      aiModelsCache = null;
+      throw e;
+    });
+    return aiModelsCache;
+  }
+
+  // 在容器里渲染「模型」下拉框（只列已配置厂商；Ollama 为本地实时模型清单）
+  // 返回取值函数：{ provider, model }（自动模式返回空对象）
+  function wireModelPicker(root) {
+    var host = root && root.querySelector ? root.querySelector('.ai-model-picker') : null;
+    if (!host) return null;
+    if (host.getAttribute('data-wired')) return host._pick;
+    host.setAttribute('data-wired', '1');
+    host.innerHTML = '<span class="ai-model-label">模型</span>' +
+      '<select class="ai-model-select"><option value="">加载中…</option></select>';
+    var sel = host.querySelector('.ai-model-select');
+    loadAiModels().then(function (data) {
+      var cur = data.current || {};
+      var html = '<option value="">自动（当前：' + esc((cur.providerLabel || '') + ' ' + (cur.model || '')).trim() + '）</option>';
+      (data.providers || []).forEach(function (p) {
+        if (!p.configured) return;                       // 只列已配好 Key 的厂商
+        var models = p.models || [];
+        if (!models.length) return;
+        html += '<optgroup label="' + esc(p.label) + '">';
+        models.forEach(function (m) {
+          html += '<option value="' + esc(p.id + '|' + m.id) + '">' + esc(m.label) + '</option>';
+        });
+        html += '</optgroup>';
+      });
+      sel.innerHTML = html;
+    }).catch(function () {
+      sel.innerHTML = '<option value="">（模型清单获取失败，将用服务端默认）</option>';
+    });
+    host._pick = function () {
+      var v = sel.value || '';
+      if (!v) return {};
+      var i = v.indexOf('|');
+      if (i < 0) return {};
+      return { provider: v.slice(0, i), model: v.slice(i + 1) };
+    };
+    return host._pick;
+  }
+
+  /* ---------------- AI 深度解读（服务端调用 LLM，厂商可切换；API Key 不进浏览器） ---------------- */
 
   function textParaHTML(text) {
     return String(text || '').split(/\n{2,}/).map(function (p) {
@@ -328,16 +378,21 @@
     var btn = root.querySelector('.btn-ai');
     var out = root.querySelector('.ai-out');
     if (!btn || !out) return;
+    var pickFn = wireModelPicker(root);   // 有模型选择器就用它（页面上手选厂商/模型）
     var running = false;
     btn.addEventListener('click', function () {
       if (running) return;
       running = true;
       btn.disabled = true;
       out.hidden = false;
-      out.innerHTML = '<p class="hint">AI 解读生成中…（约 10-30 秒）</p>';
-      post('/api/ai-interpret', payload).then(function (res) {
+      out.innerHTML = '<p class="hint">AI 解读生成中…（云端模型约 10-30 秒，本地小模型可能更久）</p>';
+      var pick = pickFn ? pickFn() : {};
+      var body = Object.assign({}, payload, pick);   // 页面上手选的厂商/模型
+      post('/api/ai-interpret', body).then(function (res) {
+        var who = (res && res.model) || 'AI 模型';
+        if (res && res.providerLabel) who = res.providerLabel + ' · ' + who;
         out.innerHTML = '<div class="ai-text">' + textParaHTML(res && res.text) + '</div>' +
-          '<p class="hint">由 ' + esc((res && res.model) || 'MiMo') + ' 生成' +
+          '<p class="hint">由 ' + esc(who) + ' 生成' +
           (res && res.cached ? '（同盘缓存）' : '') + '，仅供参考。</p>';
       }).catch(function (e) {
         out.innerHTML = '<p class="hint">AI 解读暂不可用：' + esc((e && e.message) || '未知错误') +
@@ -390,6 +445,8 @@
     wireDeepPanel: wireDeepPanel,
     refreshDeep: refreshDeep,
     wireAi: wireAi,
+    wireModelPicker: wireModelPicker,
+    loadAiModels: loadAiModels,
     LS_KEY: LS_KEY
   };
 })();

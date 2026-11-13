@@ -169,3 +169,80 @@ VERIFY_BASE=http://127.0.0.1:3904 node scripts/verify-e2e.mjs
 复跑：`TOKEN=$(grep -o 'DIVINATION_ADMIN_TOKEN=.*' .env | cut -d= -f2) PROBE_TOKEN="$TOKEN" PROBE_BASE=http://127.0.0.1:3904 node scripts/.probe-admin.mjs`（探针文件不入库，见 `.gitignore`）。
 
 回归：`node scripts/verify-static.mjs` → 5/5（扫描 245 条 CSS 规则）；`VERIFY_BASE=http://127.0.0.1:3904 node scripts/verify-e2e.mjs` → 11/11。
+
+## 9. 追加验证：AI 解读多厂商抽象（2026-11-13）
+
+改动范围：新增 `server/services/llm.ts`（厂商注册表 + 通用 OpenAI 兼容客户端，删除 `server/services/mimo.ts`）、`server/routes/aiInterpret.ts`、`server/routes/admin.ts`（提示词自称与错误码改为厂商无关）、`server/index.ts`（`/api/health` 增加 `ai` 字段、启动 banner 打印当前厂商）、`public/assets/{app,tarot,liuyao,admin}.js`（去掉 MiMo 硬编码文案）、`.env`、`README.md` §2/§4.7。
+
+厂商选择规则：`AI_PROVIDER` 显式指定 → Key 前缀嗅探（`sk-cp-` → MiniMax）→ 按注册表顺序取第一个配了 Key 的厂商。配置项：`<前缀>_API_KEY/_BASE_URL/_MODEL/_TIMEOUT_MS/_MAX_TOKENS/_THINKING/_EXTRA_PARAMS` + 通用 `AI_*` 覆盖。
+
+实测（MiniMax 用本机 Coding Plan key `sk-cp-…`，DeepSeek 用本机 `sk-…`）：
+
+| # | 断言 | 结果 |
+|---|---|---|
+| V1 | `AI_PROVIDER=minimax` → `/api/health` 返回 `ai.provider=minimax`、模型 `MiniMax-M3`；banner 同步打印 | passed |
+| V2 | `POST /api/ai-interpret`（六爻·财运）→ `ok:true provider=minimax model=MiniMax-M3`，正文 1167 字，`usage.completion_tokens=743`（`reasoning_tokens=0`，思考已关） | passed |
+| V3 | `AI_PROVIDER=deepseek` → 同请求 `ok:true provider=deepseek`，正文 1198 字 | passed |
+| V4 | `AI_PROVIDER=compat` + `LLM_BASE_URL/LLM_MODEL/LLM_API_KEY` → `ok:true provider=compat model=MiniMax-M3`（1144 字），证明任意 OpenAI 兼容厂商免改代码接入 | passed |
+| V5 | 不设 `AI_PROVIDER`、只给 `MINIMAX_API_KEY=sk-cp-…` → 前缀嗅探命中 `provider=minimax`，正文 992 字 | passed |
+| V6 | `AI_PROVIDER=mimo` 但未配 `MIMO_API_KEY`（其它厂商已配）→ 503 `AI_NOT_CONFIGURED`，报文附「检测到 MINIMAX_API_KEY 已配置，如需切换请设 AI_PROVIDER=minimax」 | passed |
+| V7 | `POST /api/admin/records/:id/interpret`（补生成）→ `ok:true provider=minimax`，正文 1105 字并写回 `report_json` | passed |
+| V8 | 推理模型把 `<think>` 段拼在正文里 → 服务端剥除后再入库（正文首字符为「总」而非 `<`） | passed |
+| V9 | 空正文时错误可诊断：返回 `AI_EMPTY` 并提示「输出被 max_tokens 截断，思考部分吃光了额度；可调大 MINIMAX_MAX_TOKENS」 | passed |
+| V10 | 回归：`node scripts/verify-static.mjs` → 5/5；`VERIFY_BASE=http://127.0.0.1:3901 node scripts/verify-e2e.mjs` → 11/11 | passed |
+| V11 | 仓库 `.env` 切到 MiniMax：`AI_PROVIDER=minimax` + `MINIMAX_API_KEY=sk-cp-…` → 启动 banner「AI: MiniMax · MiniMax-M3」，`/api/health` → `ai.provider=minimax` | passed |
+| V12 | `.env` 行内注释解析：`MINIMAX_MODEL=MiniMax-M3   # 注释` 取值为 `MiniMax-M3`（原解析器会把行尾注释一起吞进值里 → 已修 `server/bootstrap.mjs`：引号值取引号内原文、裸值按“空白 + #”截断行内注释） | passed |
+| V13 | 切换后真实解读：`POST /api/ai-interpret`（六爻·财运）→ `ok:true provider=minimax model=MiniMax-M3`，正文 1563 字，`reasoning_tokens=0` | passed |
+
+披露（不阻断）：
+
+1. 仓库 `.env` 里既有的 `MIMO_API_KEY`（`tp-…` Token Plan）**已失效**：`POST https://token-plan-cn.xiaomimimo.com/v1/chat/completions` 直连返回 `401 invalid_key`。已把 `.env` 切到 MiniMax（`AI_PROVIDER=minimax` + `MINIMAX_API_KEY=sk-cp-…`），失效的 MiMo Key 注释保留备查；要继续用 MiMo 需重新签发 Key 并把 `AI_PROVIDER` 改回 `mimo`。
+2. `AI_PROVIDER` 显式指定但该厂商没配 Key 时**不会**自动回退到别的厂商（避免误扣费），只在报错里提示已检测到哪些厂商的 Key。
+
+## 10. 追加验证：本地小模型（Ollama 8B，2026-11-13）
+
+改动范围：`server/services/llm.ts` 新增 `ollama` 厂商（免 Key、本机端点免鉴权、可配超时/温度/输出上限）、`README.md` §4.7「本地小模型（Ollama 8B）」、`.env` 注释段。
+
+本机环境：Ollama 0.6.1（`http://127.0.0.1:11434`，OpenAI 兼容端点 `/v1`），已装 `deepseek-r1:8b`（6GB，100% GPU 驻留）、`qwen-coder-14b`（12GB）、`ds-r1-14b`（12GB）。
+
+| # | 断言 | 结果 |
+|---|---|---|
+| W1 | `AI_PROVIDER=ollama` → banner「AI: Ollama（本地） · deepseek-r1:8b」，`/api/health` → `ai.provider=ollama` | passed |
+| W2 | 无需任何 Key（`OLLAMA_API_KEY` 未配）即可调用：本机端点自动免鉴权、不发 `Authorization` 头 | passed |
+| W3 | `POST /api/ai-interpret`（六爻·财运）→ `ok:true provider=ollama model=deepseek-r1:8b`，正文 1179 字，`completion_tokens=1310` | passed（耗时 1m49s） |
+| W4 | 复测（事业·本月）→ 正文 1152 字，约束遵守良好（逐字引用世爻/子孙爻事实） | passed（耗时 1m37s） |
+| W5 | 默认 `OLLAMA_MAX_TOKENS=2048`（Ollama 上下文 4096，提示词占 ~1K）、`OLLAMA_TIMEOUT_MS=300000`、`OLLAMA_TEMPERATURE=0.4` | passed |
+| W6 | **14B 模型不可用**：`qwen-coder-14b` 与 `ds-r1-14b` 各占 12GB，本机显存装不下，与 8B 共存时请求直接 500（`Internal Server Error`），加载即 OOM | **不通过（已列为禁用项）** |
+| W7 | 厂商矩阵回归（四家各跑一次真实解读）：`ollama` 807 字 / `deepseek` 1030 字 / `compat` 1132 字 / `minimax` 1145 字，全部 `ok:true` | passed |
+
+披露（不阻断）：
+
+1. 本机 12GB 显存下 **禁止使用 14B 模型**（`qwen-coder-14b` / `ds-r1-14b`）：加载即 OOM / 宕机。已把 8B 设为 `ollama` 厂商默认模型，并在 README 与 `.env` 注释里写明禁用原因。
+2. Ollama 默认上下文 4096：输出上限建议 ≤2048，否则尾部会撞上下文；要更长需 `OLLAMA_CONTEXT_LENGTH=8192 ollama serve`。
+3. 8B 单次解读 1–2 分钟（云端模型 10–30 秒）；前端等待提示已改为「云端约 10-30 秒，本地小模型可能更久」。
+4. 8B 的「逐字引用排盘事实」偶尔有漂移，解读篇幅也短于 MiniMax-M3（1179 字 vs 1563 字）；严肃场景仍建议云端大模型。
+5. 过程中自查并修掉一个自引入的缺陷：新增 `<前缀>_TEMPERATURE` 后，`mimo/minimax/deepseek/compat` 四个厂商未声明 `temperatureEnvs`，`firstEnv(undefined)` 抛 `names is not iterable`，导致 `/api/health` 的 `ai.provider` 变成 `unknown`（服务器不崩，但 AI 全挂）。修复：四个厂商补齐 `temperatureEnvs` + `firstEnv` 容忍 `undefined`；回归见 W7。
+
+## 11. 追加验证：页面手选模型（2026-11-13）
+
+改动范围：新增 `server/routes/aiModels.ts`（`GET /api/ai-models`）、`server/services/llm.ts`（`knownModels` / `blockedModelPatterns` / `resolveProviderById` / `listProviderChoices` / `validateModel`；`chatComplete` 支持 `provider`+`model` 覆盖）、`server/routes/aiInterpret.ts` 与 `server/routes/admin.ts`（透传所选厂商/模型）、`public/assets/app.js`（`wireModelPicker` + 请求体合并）、`public/assets/tarot.js`/`liuyao.js`（下拉框容器）、`public/assets/admin.js` + `public/admin.html`（管理页补解读也能选模型）、`public/assets/styles.css`（`.ai-model-picker` 静态样式）、`README.md` §4.7。
+
+| # | 断言 | 结果 |
+|---|---|---|
+| M1 | `GET /api/ai-models` → `current={provider:minimax, model:MiniMax-M3}` + `providers` 5 家；含各厂商模型清单，**不含任何 Key** | passed |
+| M2 | Ollama 一组是**实时** `/models`：`deepseek-r1:8b` 在列，而 14B（`qwen-coder-14b` / `ds-r1-14b`）按 `blockedModelPatterns` 被屏蔽 | passed |
+| M3 | 页面下拉框（真浏览器探针）：选项 = 自动（当前：MiniMax MiniMax-M3）/ MiniMax-M3 / MiniMax-M2.7 / MiniMax-M3.1-Flash-Preview / deepseek-r1:8b；未配 Key 的厂商不出现 | passed |
+| M4 | 手选 `MiniMax-M2.7` → 点「AI 深度解读」→ 输出脚注「由 MiniMax · MiniMax-M2.7 生成」；服务端 `model=MiniMax-M2.7` | passed |
+| M5 | 请求体带 `provider`/`model` 的直连：`minimax\|MiniMax-M2.7` → `ok:true provider=minimax model=MiniMax-M2.7`（正文 1151 字） | passed |
+| M6 | 手选本地 8B：`provider=ollama&model=deepseek-r1:8b` → `ok:true provider=ollama model=deepseek-r1:8b`（正文 824 字） | passed |
+| M7 | 非法模型名 → 400 `AI_BAD_MODEL`；未知厂商 → 400 `AI_UNKNOWN_PROVIDER`；选未配 Key 的厂商 → 503 `AI_NOT_CONFIGURED`（含切换提示） | passed |
+| M8 | 前端资源（`liuyao.html` + `app.js`）不含任何 Key 形态字符串 | passed |
+| M9 | 回归：`verify-static` 5/5（新增 CSS 无效果属性）、`verify-e2e` 11/11（深度面板结构未受影响） | passed |
+
+探针脚本：`scripts/.probe-modelpicker.mjs`（不入库，`.gitignore` 已忽略 `.probe-*.mjs`），复跑：`node scripts/.probe-modelpicker.mjs`（需站点在 3904 运行）。
+
+披露：
+
+1. Ollama 的模型列表随本机安装情况实时变化；若 Ollama 没起，下拉框只剩「自动」项（其余降级为服务端默认，不报错）。
+2. 页面选模型只作用于**当次请求**，不改服务端 `.env`；想固化就改 `.env` 的 `AI_PROVIDER` / `*_MODEL`。
+3. 本地 8B 在显存紧张时 Ollama 侧会偶发 `model runner has unexpectedly stopped`（实测 13s 内 500，重试即恢复）；服务端已把排查提示附在错误消息里（先 `ollama stop` 清显存 / 用 8B）。

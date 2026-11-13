@@ -13,6 +13,7 @@ import express from 'express';
 import cors from 'cors';
 import fs from 'node:fs';
 import { PUBLIC_DIR, DATA_DIR } from './paths.ts';
+import { llmInfo } from './services/llm.ts';   // AI 解读用的 LLM 客户端（厂商可切换；Key 只在服务端）
 
 const PORT = Number(process.env.PORT || 3901);
 // 默认绑所有网卡（局域网部署）；只在本机使用时可用 HOST=127.0.0.1 收紧
@@ -69,9 +70,11 @@ const { default: tarotRouter } = await import('../vendor/guanwei/server/src/rout
 const { default: cardsRouter } = await import('./routes/tarotCards.ts');   // GET /api/tarot/cards（补图片字段）
 const { default: liuyaoRouter } = await import('./routes/liuyao.ts');      // POST /api/liuyao
 const { default: promptRouter } = await import('./routes/prompt.ts');      // GET/POST /api/prompt
-const { default: aiInterpretRouter } = await import('./routes/aiInterpret.ts'); // POST /api/ai-interpret（MiMo）
+const { default: aiInterpretRouter } = await import('./routes/aiInterpret.ts'); // POST /api/ai-interpret（可切换厂商的 LLM）
+const { default: aiModelsRouter } = await import('./routes/aiModels.ts');   // GET /api/ai-models（页面上手选模型）
 const { default: tarotSessionRouter } = await import('./routes/tarotSession.ts'); // POST /api/tarot/session|interpret（落库）
 const { default: adminRouter } = await import('./routes/admin.ts');        // GET /api/admin/records（口令）
+const { default: chartRouter } = await import('./routes/chart.ts');        // POST /api/chart（七术统一起盘）
 
 // 顺序敏感：图片包装路由先应答 GET /cards，其余 tarot 端点交给 vendor
 app.use('/api/tarot', cardsRouter);
@@ -81,7 +84,9 @@ app.use('/api/tarot', tarotRouter);
 app.use('/api/liuyao', liuyaoRouter);
 app.use('/api/prompt', promptRouter);
 app.use('/api/ai-interpret', aiRateLimit(), aiInterpretRouter);
+app.use('/api/ai-models', aiModelsRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/chart', chartRouter);
 
 app.get('/api', (_req, res) => {
   res.json({
@@ -92,11 +97,13 @@ app.get('/api', (_req, res) => {
       'GET /api/tarot/cards', 'GET /api/tarot/spreads',
       'POST /api/tarot/session', 'POST /api/tarot/draw', 'POST /api/tarot/interpret',
       'POST /api/liuyao',
+      'GET /api/chart/arts', 'POST /api/chart',
       'GET|POST /api/prompt',
       'POST /api/ai-interpret',
+      'GET /api/ai-models',
       'GET /api/admin/records', 'GET /api/admin/records/:id', 'GET /api/admin/export.csv',
     ],
-    pages: ['/', '/tarot.html', '/liuyao.html', '/admin.html'],
+    pages: ['/', '/tarot.html', '/liuyao.html', '/bazi', '/ziwei', '/qimen', '/liuren', '/meihua', '/xiaoliuren', '/astrology', '/admin.html'],
     time: Date.now(),
   });
 });
@@ -104,12 +111,14 @@ app.get('/api', (_req, res) => {
 app.get('/api/health', (_req, res) => {
   let dataDirOk = true;
   try { fs.accessSync(DATA_DIR, fs.constants.W_OK); } catch { dataDirOk = false; }
+  const ai = llmInfo();
   res.json({
     status: dataDirOk ? 'ok' : 'degraded',
     dataDir: DATA_DIR,
     dataDirOk,
     port: PORT,
     hooks: BOOT.hooksInstalled,
+    ai: { configured: ai.configured, provider: ai.provider, model: ai.model },
     timestamp: Date.now(),
   });
 });
@@ -131,6 +140,7 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 });
 
 const server = app.listen(PORT, HOST, () => {
+  const ai = llmInfo();
   console.log(`
   🔮 divination-station 计算服务已启动
   站点:   http://localhost:${PORT}/          （首页）
@@ -139,6 +149,7 @@ const server = app.listen(PORT, HOST, () => {
   健康:   http://localhost:${PORT}/api/health
   监听:   ${HOST}:${PORT}（0.0.0.0 = 局域网内其他设备可通过 http://<本机IP>:${PORT}/ 访问）
   数据:   ${DATA_DIR}
+  AI:     ${ai.configured ? `${ai.providerLabel} · ${ai.model}` : '未配置 API Key（AI 深度解读不可用，可复制提示词到任意 AI）'}
   `);
 });
 server.on('error', (e: any) => {

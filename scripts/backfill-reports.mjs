@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// scripts/backfill-reports.mjs —— 给历史记录批量补生成 AI 解读（可选，会消耗 MiMo 额度）
+// scripts/backfill-reports.mjs —— 给历史记录批量补生成 AI 解读（可选，会消耗 AI 额度）
 //
 // 用法：
 //   node scripts/backfill-reports.mjs --token <管理口令> [--base http://127.0.0.1:3901] [--limit 5] [--dry-run]
@@ -7,7 +7,7 @@
 // 逻辑：先拉 /api/admin/records（分页）→ 过滤 hasReport=false → 逐条 POST /api/admin/records/:id/interpret
 //      每条 10-60 秒；失败只记录不中断。默认只处理 5 条（防止手滑烧额度），--limit 0 表示全部。
 //
-// 注意：脚本只调用本项目的 admin 接口，不直接读写 SQLite；MiMo Key 由服务端持有。
+// 注意：脚本只调用本项目的 admin 接口，不直接读写 SQLite；API Key 由服务端持有。
 const args = process.argv.slice(2);
 function arg(name, def) {
   const i = args.indexOf('--' + name);
@@ -68,7 +68,7 @@ for (const [i, r] of todo.entries()) {
   } catch (e) {
     fail++;
     console.log(`失败：${e.code || ''} ${e.message}`);
-    if (e.code === 'MIMO_NOT_CONFIGURED') break; // 没配 Key 就别继续了
+    if (e.code === 'AI_NOT_CONFIGURED' || e.code === 'MIMO_NOT_CONFIGURED') break; // 没配 Key 就别继续了
   }
 }
 console.log(`\n完成：成功 ${ok}，失败 ${fail}；剩余未补 ${Math.max(targets.length - ok, 0)} 条（再跑一次可继续）`);
