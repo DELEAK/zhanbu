@@ -1763,8 +1763,15 @@ html[data-perf="high"] #toast.is-show {
 }
 
 /* 多列布局辅助（三卦并排 / 九宫 / 四课三传） */
+.pan-grid.cols-2 { --pan-cols: 2; }
+.pan-grid.cols-3 { --pan-cols: 3; }
 .pan-grid.cols-4 { --pan-cols: 4; }
 .pan-grid.cols-7 { --pan-cols: 7; }
+
+.mono {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
 
 /* 首页入口：牌类单卡整行 */
 .entry-grid--one {
