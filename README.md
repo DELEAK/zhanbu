@@ -12,9 +12,8 @@ divination-station/
 │   ├── paths.ts                # ROOT / PUBLIC_DIR / DATA_DIR
 │   ├── routes/tarotCards.ts    # GET /api/tarot/cards（补 slug + 三档图片字段）
 │   ├── routes/liuyao.ts        # POST /api/liuyao
-│   ├── routes/chart.ts         # POST /api/chart（七术统一起盘）+ GET /api/chart/arts（能力清单）+ POST /api/chart/lucky
+│   ├── routes/chart.ts         # POST /api/chart（七术统一起盘）+ GET /api/chart/arts（能力清单）
 │   ├── services/chartInputs.ts # 七术输入归一化（公历→农历/干支换算 + 字段校验）
-│   ├── services/lucky.ts       # 择吉起盘 v1：吉凶判定 + 时间窗搜索（真实盘面、参数可复现）
 │   ├── routes/prompt.ts        # GET|POST /api/prompt
 │   ├── routes/aiInterpret.ts   # POST /api/ai-interpret（服务端调用 LLM 生成 AI 深度解读）
 │   ├── routes/aiModels.ts      # GET /api/ai-models（页面上手选厂商/模型的清单）
@@ -29,7 +28,6 @@ divination-station/
 │   ├── qimen.html liuren.html  # 奇门遁甲 / 大六壬
 │   ├── meihua.html xiaoliuren.html  # 梅花易数 / 小六壬
 │   ├── astrology.html admin.html    # 西方星盘 / 记录管理
-│   ├── lucky.html              # 择吉起盘（四术，v1）
 │   └── assets/                 # app.js（公共助手 DS）+ 9 个页面脚本 + styles.css
 ├── data/                       # ★ 运行期数据（guanwei.db，SQLite；已 gitignore）
 ├── scripts/                    # 牌面图片抓取与编码 + 验证脚本（禁止修改业务逻辑）
@@ -165,10 +163,9 @@ ssh -p 443 -R 0:127.0.0.1:3903 a.pinggy.io
 | **梅花易数** | `http://localhost:3901/meihua.html` |
 | **小六壬** | `http://localhost:3901/xiaoliuren.html` |
 | **西方星盘** | `http://localhost:3901/astrology.html` |
-| **择吉起盘** | `http://localhost:3901/lucky.html`（四术择吉，v1） |
 | 记录管理（可选） | `http://localhost:3901/admin.html`（需 `DIVINATION_ADMIN_TOKEN`） |
 
-（`/lucky`、`/bazi`、`/ziwei`、`/qimen`、`/liuren`、`/meihua`、`/xiaoliuren`、`/astrology` 这类无后缀路径也能访问：静态中间件开了 `extensions:['html']` 补全。）
+（`/bazi`、`/ziwei`、`/qimen`、`/liuren`、`/meihua`、`/xiaoliuren`、`/astrology` 这类无后缀路径也能访问：静态中间件开了 `extensions:['html']` 补全。）
 
 > **局域网访问**：服务默认监听 `0.0.0.0:3901`，把上表 URL 里的 `localhost` 换成本机局域网 IP（如 `http://10.28.136.2:3901/`）即可在手机/其他电脑上打开；确保防火墙放行 `3901/tcp`（Fedora 默认区已放行 1025-65535/tcp）。前端与 API 同源同端口，局域网访问无需额外 CORS 配置。
 
@@ -193,7 +190,6 @@ ssh -p 443 -R 0:127.0.0.1:3903 a.pinggy.io
 | POST | `/api/tarot/interpret` | 服务端生成解读（`{cards,spread,question,category?,id?}`，question ≤300 字；带 `id` 时把解读全文补挂到记录） |
 | POST | `/api/liuyao` | 服务端按当前时间 + 随机起卦，**并写入 `data/guanwei.db`（含来源 IP/UA）** |
 | GET | `/api/chart/arts` | 七术能力清单：`label` / `kind`（mingpan\|zhanwen）/ `group` / `needs` / `schema` |
-| POST | `/api/chart/lucky` | **择吉起盘（v1）**：在时间窗内取最近一个「比平好一点」的吉盘（`qimen`/`liuren`/`meihua`/`xiaoliuren`），返回真实盘面 + `lucky:{tier,attempts,matchedAt}`，参数落库可复现 |
 | POST | `/api/chart` | **七术统一起盘**（`bazi`/`ziwei`/`astrology`/`qimen`/`liuren`/`meihua`/`xiaoliuren`）：校验并归一化输入 → 服务端排盘 → 落库 → 返回 `{id,brief,duanyu,resultRaw}` |
 | GET/POST | `/api/prompt` | 生成可直接粘贴给 LLM 的中文提示词（盘面事实 + 古籍引证 + 用神候选） |
 | POST | `/api/ai-interpret` | **AI 深度解读**：用与 `/api/prompt` 相同的提示词调用 LLM 生成解读全文（需配置任一厂商的 Key；未配置返回 503；可带 `provider`/`model` 临时换模型） |
@@ -532,26 +528,6 @@ curl -s -X POST http://127.0.0.1:3901/api/chart -H 'Content-Type: application/js
 ```
 
 `GET /api/chart/arts` 返回七术能力清单（`label`/`kind`/`group`/`needs`/`schema`，`schema` 即入参说明）。响应：`{id,artId,kind,question,category,params,resultRaw,brief,yongshen,duanyu}`；`kind` 为 `mingpan`（八字/紫微/占星）或 `zhanwen`（奇门/六壬/梅花/小六壬）。输入归一化与校验见 `server/services/chartInputs.ts`：年份 1900–2100、日期真实存在（2/31 会 400）、`hourIndex` 0–11（八字/紫微允许 -1）、报数 1–999、经度 ±180、纬度 ±90、问题 ≤300 字。错误码：`BAD_ART` / `BAD_INPUTS`（含 `field`）/ `BAD_QUESTION` / `INTERNAL`（不泄漏堆栈）。
-
-### 4.6.2 `POST /api/chart/lucky`（择吉起盘 · v1）
-
-在用户指定的时间附近，向前/向后寻找**最近一个**判定为「吉」（比平好一点）的真实盘面：
-候选盘全部由 vendor 引擎按规则计算，不做任何 `resultRaw` 改写；命中时刻与入参写入记录 `params`，
-所以「这盘」可复现。
-
-```bash
-curl -s -X POST http://127.0.0.1:3901/api/chart/lucky -H 'Content-Type: application/json' \
-  -d '{"artId":"xiaoliuren","question":"这次合作能否顺利","category":"事业","windowMinutes":720}'
-
-# 指定想占的时刻（留空=现在）；窗口 60–4320 分钟
-curl -s -X POST http://127.0.0.1:3901/api/chart/lucky -H 'Content-Type: application/json' \
-  -d '{"artId":"qimen","question":"明日面试","category":"事业","at":"2026-11-13T18:00","windowMinutes":1440}'
-```
-
-- 支持四术：小六壬（时辰）、梅花（时辰）、奇门（分钟）、六壬（分钟）；八字/紫微/占星无吉凶档位，六爻/塔罗走普通入口。
-- 判定：各术结构化吉凶规则（小六壬掌诀 / 梅花体用生克 / 奇门问事用神门与八神 / 六壬三传吉将与课体）+ `brief` 凶词交叉校验（防「页面写吉、盘面写凶」）。
-- 响应在 `/api/chart` 基础上多 `lucky:{tier,reason,matchedAt,attempts,windowMinutes}`；窗口内无吉盘返回 404 `NO_LUCKY_CHART`（提示扩大窗口）。
-- 记录 `params.source='lucky-search'`，含命中时刻、实际入参与候选次数。
 
 ### 4.7 `POST /api/ai-interpret`（AI 深度解读 · 多厂商 LLM）
 

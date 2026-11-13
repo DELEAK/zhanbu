@@ -201,32 +201,6 @@ for (const [name, body, wantStatus, wantError] of BAD) {
     `correctedHour=${zj && zj.resultRaw && zj.resultRaw.correctedHour}`);
 }
 
-// ── A8：择吉起盘（v1，四术）──
-{
-  const LUCKY = ['xiaoliuren', 'meihua', 'qimen', 'liuren'];
-  let pass = 0;
-  const details = [];
-  for (const artId of LUCKY) {
-    const { status, json } = await postJson('/api/chart/lucky', {
-      artId, question: '择吉验收：这件事能否顺利', category: '事业', windowMinutes: 720,
-    });
-    const lucky = json && json.lucky;
-    const goodId = !!(json && typeof json.id === 'string' && json.id.startsWith('d_'));
-    const briefOk = !!(json && typeof json.brief === 'string' && json.brief.length >= 60);
-    const promptRes = await postJson('/api/prompt', {
-      artId, question: '择吉验收：这件事能否顺利', category: '事业', resultRaw: json && json.resultRaw,
-    });
-    const prompt = (promptRes.json && promptRes.json.prompt) || '';
-    const promptOk = promptRes.status === 200 && prompt.includes('必须逐字引用下列排盘事实') && prompt.includes(json.brief);
-    if (status === 200 && lucky && lucky.tier === 'ji' && goodId && briefOk && promptOk) pass++;
-    details.push(`${artId}: status=${status} tier=${lucky && lucky.tier} attempts=${lucky && lucky.attempts} brief=${json && (json.brief || '').length}`);
-  }
-  const { status: badArt, json: badJson } = await postJson('/api/chart/lucky', { artId: 'bazi', question: 'x' });
-  ok('A8 择吉四术均 200 且 tier=ji、id 合法、brief≥60、提示词含硬约束',
-    pass === LUCKY.length,
-    details.join('；') + `；bazi→${badArt} ${badJson && badJson.error}`);
-}
-
 ok('汇总：硬约束逐字保留 + 七术 persona 全命中', hardRule && personaHit === CASES.length,
   `硬约束=${hardRule}，persona=${personaHit}/${CASES.length}`);
 

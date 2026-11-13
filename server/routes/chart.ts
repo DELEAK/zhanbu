@@ -12,7 +12,6 @@ import { createDivination } from '../../vendor/guanwei/server/src/services/divin
 import { recordAccess } from '../services/readingLog.ts';
 import { clientIp } from '../services/guard.ts';
 import { ART_META, CHART7_ARTS, InputError, normalizeChartInputs } from '../services/chartInputs.ts';
-import { LUCKY_ARTS, findLucky, type LuckyArt } from '../services/lucky.ts';
 
 const LOCAL_USERNAME = 'local';
 const MAX_QUESTION = 300;
@@ -48,100 +47,6 @@ router.get('/arts', (_req, res) => {
     schema: CHART_INPUT_SCHEMA[id] || {},
   }));
   res.json({ arts });
-});
-
-// POST /api/chart/lucky —— 择吉起盘（v1）：在指定时间附近找最近的「吉盘」，返回真实盘面
-router.post('/lucky', (req, res) => {
-  const body = (req.body || {}) as Record<string, unknown>;
-  const artId = body.artId;
-
-  if (typeof artId !== 'string' || !(LUCKY_ARTS as readonly string[]).includes(artId)) {
-    return res.status(400).json({
-      error: 'BAD_ART',
-      message: `择吉暂支持四术：${LUCKY_ARTS.join(' / ')}（命盘类无吉凶档位，六爻/塔罗请用普通入口）`,
-    });
-  }
-
-  const question = trimText(body.question, MAX_QUESTION);
-  if (body.question != null && String(body.question).trim().length > MAX_QUESTION) {
-    return res.status(400).json({ error: 'BAD_QUESTION', message: `所问之事请控制在 ${MAX_QUESTION} 字以内` });
-  }
-  const category = trimText(body.category, MAX_CATEGORY);
-
-  let at: Date | undefined;
-  if (body.at != null && String(body.at).trim() !== '') {
-    const d = new Date(String(body.at));
-    if (Number.isNaN(d.getTime())) {
-      return res.status(400).json({ error: 'BAD_INPUTS', message: '起盘时间无法识别，请用本地时间（YYYY-MM-DDTHH:mm）', field: 'at' });
-    }
-    at = d;
-  }
-
-  let windowMinutes: number | undefined;
-  if (body.windowMinutes != null && String(body.windowMinutes).trim() !== '') {
-    const n = Number(body.windowMinutes);
-    if (!Number.isFinite(n) || n < 60 || n > 4320) {
-      return res.status(400).json({ error: 'BAD_INPUTS', message: '搜索窗口需在 60–4320 分钟之间', field: 'windowMinutes' });
-    }
-    windowMinutes = Math.floor(n);
-  }
-
-  const hit = findLucky({ artId: artId as LuckyArt, category, at, windowMinutes });
-  if (!hit) {
-    return res.status(404).json({
-      error: 'NO_LUCKY_CHART',
-      message: '所选时间窗口内暂未找到吉盘：可以扩大搜索窗口，或换一个所问之事再试',
-    });
-  }
-
-  const record = createDivination({
-    username: LOCAL_USERNAME,
-    artId: hit.artId,
-    kind: 'zhanwen',
-    question: question || undefined,
-    params: {
-      source: 'lucky-search',
-      inputs: hit.inputs,
-      at: hit.at,
-      attempts: hit.attempts,
-      verdict: hit.verdict.tier,
-      reasons: hit.verdict.reasons,
-      category: category || undefined,
-    },
-    resultRaw: hit.resultRaw,
-  });
-
-  recordAccess(record.id, {
-    ip: clientIp(req),
-    ua: req.headers['user-agent'] as string,
-    referer: req.headers['referer'] as string,
-  });
-
-  return res.json({
-    id: record.id,
-    artId: hit.artId,
-    kind: 'zhanwen',
-    question: question || null,
-    category: category || null,
-    params: {
-      source: 'lucky-search',
-      inputs: hit.inputs,
-      at: hit.at,
-      attempts: hit.attempts,
-      verdict: hit.verdict.tier,
-    },
-    resultRaw: hit.resultRaw,
-    brief: hit.brief,
-    yongshen: null,
-    duanyu: hit.duanyu,
-    lucky: {
-      tier: hit.verdict.tier,
-      reason: hit.verdict.reasons.join('；'),
-      matchedAt: hit.at,
-      attempts: hit.attempts,
-      windowMinutes: windowMinutes ?? 720,
-    },
-  });
 });
 
 router.post('/', (req, res) => {

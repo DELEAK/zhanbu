@@ -26,7 +26,7 @@ const ok = (name, pass, detail) => {
 };
 
 // ─── S1：HTML 默认 data-perf=low ───
-const htmls = ['index.html', 'tarot.html', 'liuyao.html', 'bazi.html', 'ziwei.html', 'qimen.html', 'liuren.html', 'meihua.html', 'xiaoliuren.html', 'astrology.html', 'lucky.html'];
+const htmls = ['index.html', 'tarot.html', 'liuyao.html', 'bazi.html', 'ziwei.html', 'qimen.html', 'liuren.html', 'meihua.html', 'xiaoliuren.html', 'astrology.html'];
 const STATIC_ATTR = /data-perf\s*=\s*["']low["']/;
 const BOOTSTRAP = /dataset\.perf\s*=\s*localStorage\.getItem\(['"]divination\.perf['"]\)\s*===\s*['"]high['"]\s*\?\s*['"]high['"]\s*:\s*['"]low['"]/;
 for (const f of htmls) {

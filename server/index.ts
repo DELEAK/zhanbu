@@ -97,13 +97,13 @@ app.get('/api', (_req, res) => {
       'GET /api/tarot/cards', 'GET /api/tarot/spreads',
       'POST /api/tarot/session', 'POST /api/tarot/draw', 'POST /api/tarot/interpret',
       'POST /api/liuyao',
-      'GET /api/chart/arts', 'POST /api/chart', 'POST /api/chart/lucky',
+      'GET /api/chart/arts', 'POST /api/chart',
       'GET|POST /api/prompt',
       'POST /api/ai-interpret',
       'GET /api/ai-models',
       'GET /api/admin/records', 'GET /api/admin/records/:id', 'GET /api/admin/export.csv',
     ],
-    pages: ['/', '/lucky', '/tarot.html', '/liuyao.html', '/bazi', '/ziwei', '/qimen', '/liuren', '/meihua', '/xiaoliuren', '/astrology', '/admin.html'],
+    pages: ['/', '/tarot.html', '/liuyao.html', '/bazi', '/ziwei', '/qimen', '/liuren', '/meihua', '/xiaoliuren', '/astrology', '/admin.html'],
     time: Date.now(),
   });
 });
