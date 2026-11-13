@@ -42,6 +42,7 @@ index.html（首页入口，九术分三组）
  ├─ 占问组：liuyao.html 六爻 · qimen.html 奇门 · liuren.html 六壬
  │          · meihua.html 梅花 · xiaoliuren.html 小六壬
  └─ 牌类组：tarot.html 塔罗
+择吉：lucky.html（四术择吉起盘，v1；不占首页九卡位，独立入口）
 运营：admin.html（起占记录，口令保护；不在首页入口暴露）
 公共 chrome：顶栏（站名 + 性能模式 toggle）｜页脚（免责声明 + 机制说明）
 无导航栏之外的栏目；无账号、无历史、无统计。
@@ -187,6 +188,15 @@ STEP 03 简要盘面（服务端 chartBrief 定稿）→ details.deep-panel 懒�
 - **前端零计算**：盘面、干支、星曜、宫位、断语全部来自 `POST /api/chart` 的 `resultRaw` 与 `brief`；页面只用 `resultRaw` 查表渲染，`brief` 原样展示并可交叉核对。
 - **记录一致**：结果区 `.result-meta` 展示记录 id（`d_…`）；`/admin.html` 自动出现同一条记录，summary 由服务端 `readingLog.toRow()` 按术生成。
 - **深度懒注入**：`details.deep-panel[data-result="1"]` 首次展开才请求 `/api/prompt`；注入顺序固定为「逐项证据 → AI 解读提示词（textarea + 复制 + AI 按钮）→ AI 输出区」。
+
+### 1.6 页面 D：择吉起盘（lucky.html，v1）
+
+与七页同骨架，但输入是「择吉条件」而非出生信息：
+
+- **STEP 01 择吉条件**：术数下拉（小六壬 / 梅花 / 奇门 / 六壬）+ 想占时间（`datetime-local`，留空=现在）+ 搜索窗口（±1h / ±6h / ±12h / ±24h / ±2天 / ±3天）。
+- **STEP 02 所问之事**：问题（≤300 字）+ 分类（综合/感情/事业/财运/学业/健康/人际）。
+- **STEP 03 择吉盘面**：`.result-meta` 写「吉愿模式 · 目标「比平好一点」 · 第 N 次命中 · 起盘时刻 · 术数 · 记录 id」；`.chart-brief` 逐字展示服务端 `brief`；「换一天再试」按钮把 `at` 设为命中时刻 +24h 再走一次；深度面板（`data-result="1"`）含「择吉判定理由 / 盘面事实逐字 / 断语 / AI 提示词」。
+- **一致性**：所有候选盘均由 `POST /api/chart/lucky` 的后端引擎真实计算；页面只渲染 `resultRaw` 与 `brief`，不参与吉凶判定。
 
 ---
 
@@ -402,6 +412,20 @@ html[data-perf="high"] .pan-cell { animation: pan-in .16s ease both; animation-d
 | **简要** | `.chart-brief` 服务端文案（逐字，≤1 屏）+ 本术盘面（布局见 §1.5）：四柱 / 棋盘 / 九宫 / 四课三传 / 三卦 / 掌诀 / 日月升 | `POST /api/chart` → `brief` + `resultRaw` |
 | **深度** | ① 逐项证据（逐柱 / 逐宫 / 逐格 / 逐爻 / 逐星），全部取自 `resultRaw` 字段（禁前端推算）② 断语 `duanyu`（无命中规则库时显示服务端兜底文案）③ 时辰未知约束注记（bazi / ziwei）④ **AI 解读提示词** 复制按钮 + AI 输出区 | `resultRaw`、`duanyu`、`POST /api/prompt`、`POST /api/ai-interpret` |
 
+### 4.6 择吉起盘（lucky.html，v1）
+
+| 层 | 内容 | 数据来源 |
+|---|---|---|
+| **简要** | `.chart-brief`（服务端 `brief` 逐字）+ `.result-meta` 的「吉愿模式 · 第 N 次命中 · 起盘时刻」 | `POST /api/chart/lucky` → `brief` + `lucky` |
+| **深度** | ① 择吉判定理由（`lucky.reason`，含尝试次数/命中时刻）② 盘面事实逐字（`brief`）③ 断语 `duanyu` ④ AI 提示词 + AI 输出区 | `lucky.reason`、`brief`、`duanyu`、`POST /api/prompt` |
+
+判定与搜索（后端 `server/services/lucky.ts`）：
+
+- 吉凶规则：小六壬掌诀（大安/速喜/小吉）· 梅花体用生克（用生体/体克用）· 奇门问事用神门（开/休/生）与八神 · 六壬三传吉将（≥2）与课体。
+- 交叉校验：`brief` 若含凶词（空亡/入墓/反吟/伏吟/死门…）则降为平，防「页面写吉、盘面写凶」。
+- 搜索：奇门/六壬按分钟、梅花/小六壬按时辰（120 分钟）向两侧交替取最近候选；命中即停，窗口 60–4320 分钟；无解返回 404 `NO_LUCKY_CHART`。
+- 可复现：记录 `params` 存 `source:'lucky-search'`、命中时刻、实际入参与候选次数。
+
 ---
 
 ## 5. 验收清单（评审逐条打勾）
@@ -454,6 +478,13 @@ html[data-perf="high"] .pan-cell { animation: pan-in .16s ease both; animation-d
 - [ ] 断语：qimen/liuren/xiaoliuren/bazi/ziwei 非空（A5）；bazi 时辰未知 `hourGZ` 为「未知/空」且提示词含「时辰未知 · 最高约束」，ziwei `correctedHour=-1` 同约束（A7）。
 - [ ] 七页行为：首访 low、起盘出简要盘面、深度展开前 `.deep-body` 为空、展开后 >800 字、含 AI/复制按钮、切换 high↔low 零丢失（E10×7）。
 - [ ] `node scripts/verify-static.mjs`（S1 覆盖十份 HTML）、`node scripts/verify-arts.mjs`（A1–A7）、`VERIFY_BASE=… node scripts/verify-e2e.mjs`（E1–E9 + E10）全绿。
+
+### 5.7 择吉起盘（v1）
+
+- [ ] `/lucky` 可访问，首访 low，表单齐全（术数/时间/窗口/问题/分类）。
+- [ ] `POST /api/chart/lucky` 四术均 200，`lucky.tier==='ji'`，`id` 以 `d_` 开头，`brief`≥60 字，提示词含硬约束（verify-arts A8）。
+- [ ] 页面：起盘后出简要盘面与「吉愿模式 · 第 N 次命中」；深度展开前为空、展开后含判定理由/盘面事实/提示词/AI 与复制按钮；「换一天再试」刷新结果且回填 `at`。
+- [ ] 非法术数 400 `BAD_ART`；窗口外无解 404 `NO_LUCKY_CHART`；记录 `params.source='lucky-search'`。
 
 ---
 
