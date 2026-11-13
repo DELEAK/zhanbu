@@ -122,6 +122,34 @@ function toRow(r: any): RecordRow {
       const bian = raw?.bianGua?.name || raw?.bianGua?.nm || '';
       const dong = Array.isArray(raw?.dongYao) ? raw.dongYao.join(',') : '';
       summary = `本卦 ${ben}` + (bian ? ` → 变卦 ${bian}` : '（无变卦）') + (dong ? ` · 动爻 ${dong}` : '');
+    } else if (r.art_id === 'bazi') {
+      const pillars = [raw?.yearGZ, raw?.monthGZ, raw?.dayGZ, raw?.hourGZ]
+        .map((g: unknown) => (typeof g === 'string' && g ? g : '—'))
+        .join(' ');
+      summary = `四柱 ${pillars} · 日主 ${raw?.dayGan || '?'}${raw?.dayGanWx || ''} · ${raw?.strength || '旺衰未定'}`;
+    } else if (r.art_id === 'ziwei') {
+      const palaces = raw?.palaces;
+      const mingPos = palaces && typeof palaces === 'object' ? Number(palaces[0] ?? palaces['0']) : null;
+      const stars = mingPos != null && raw?.zwStars && typeof raw.zwStars === 'object'
+        ? Object.keys(raw.zwStars).filter((k) => raw.zwStars[k] === mingPos)
+        : [];
+      summary = `命宫 ${stars.length ? stars.join('、') : '空宫'} · ${raw?.juName || '?'}` +
+        (Number(raw?.correctedHour) < 0 ? ' · 时辰未知' : '');
+    } else if (r.art_id === 'astrology') {
+      summary = `上升 ${raw?.ascSign || '?'} · 太阳 ${raw?.sunSign || '?'} · 月亮 ${raw?.moonSign || '?'}`;
+    } else if (r.art_id === 'qimen') {
+      summary = `${raw?.yin ? '阴遁' : '阳遁'}${raw?.ju ?? '?'}局（${raw?.jqName || '?'}）` +
+        ` · 值符 ${raw?.zfStar || '?'} 值使 ${raw?.zsMen || '?'}门`;
+    } else if (r.art_id === 'liuren') {
+      summary = `${raw?.dayGZ || '?'}日${raw?.hourGZ || '?'}时 · ${raw?.keti || '课体未定'}` +
+        (raw?.chuan1 ? ` · 初传 ${raw.chuan1}` : '');
+    } else if (r.art_id === 'meihua') {
+      summary = `本卦 ${raw?.benGua?.name || '?'}` +
+        (raw?.bianGua?.name ? ` → 变卦 ${raw.bianGua.name}` : '') +
+        (raw?.shengke ? ` · ${raw.shengke}` : '');
+    } else if (r.art_id === 'xiaoliuren') {
+      summary = `落 ${raw?.name || '?'}` +
+        (raw?.detail?.ji ? `（${raw.detail.ji} · ${raw.detail.wx || ''}）` : '');
     }
   } catch { /* 摘要失败不影响列表 */ }
   return {

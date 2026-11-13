@@ -27,7 +27,12 @@
     return s.length > 19 ? s.slice(0, 19) : s;
   }
 
-  function artLabel(id) { return id === 'tarot' ? '塔罗' : id === 'liuyao' ? '六爻' : id; }
+  var ART_LABELS = {
+    tarot: '塔罗', liuyao: '六爻', bazi: '子平八字', ziwei: '紫微斗数',
+    qimen: '奇门遁甲', liuren: '大六壬', meihua: '梅花易数',
+    xiaoliuren: '小六壬', astrology: '西方星盘'
+  };
+  function artLabel(id) { return ART_LABELS[id] || id; }
 
   function readToken() {
     var fromUrl = '';
